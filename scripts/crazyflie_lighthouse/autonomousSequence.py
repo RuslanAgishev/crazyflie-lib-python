@@ -48,30 +48,20 @@ toFly = 1
 
 # Change the sequence according to your setup
 #             x    y    z  YAW
-
-
-# sequence = [
-#     np.array([0.0, 0.0, 0.5, 0]),
-#     np.array([0.3, 0.0, 0.5, 0]),
-#     np.array([0.0, -0.3, 0.5, 0]),
-# ]
-
 sequence = [
-    np.array([0.0, 0.0, 1.3, 0]),
-    np.array([0.8, -0.6, 1.3, 90]),
-    np.array([-0.8, 0.4, 1.3, 180]),
-    np.array([-0.8, 0.0, 1.3, 0]),
-    np.array([0.5, 0.2, 1.3, 0]),
-    np.array([0.0, 0.0, 0.1, 0]),
+    np.array([0.0, 0.0, 0.5, 0]),
+    np.array([0.3, 0.0, 0.5, 90]),
+    np.array([0.0, -0.3, 0.5, 180]),
 ]
 
-
-# p1 (0.0, 0.0, 1.3)
-# p2 (1.0, -0.4, 1.3, 90)
-# p3 (-1.0, 0.4, 1.3, 180)
-# p4 (-1.0, 0.0)
-# p5 (0.5, 0.2)
-# p6 (0.0, 0.0, 0.1, 0)
+# sequence = [
+#     np.array([0.0, 0.0, 1.3, 0]),
+#     np.array([0.8, -0.6, 1.3, 90]),
+#     np.array([-0.8, 0.4, 1.3, 180]),
+#     np.array([-0.8, 0.0, 1.3, 0]),
+#     np.array([0.5, 0.2, 1.3, 0]),
+#     np.array([0.0, 0.0, 0.1, 0]),
+# ]
 
 
 def wait_for_position_estimator(scf):
@@ -125,6 +115,7 @@ def reset_estimator(scf):
 
 
 def position_callback(timestamp, data, logconf):
+    print("position callback")
     x = data['kalman.stateX']
     y = data['kalman.stateY']
     z = data['kalman.stateZ']
@@ -141,11 +132,15 @@ def start_position_printing(scf):
     log_conf.data_received_cb.add_callback(position_callback)
     log_conf.start()
 
+def normalize(vector):
+    vector = np.array(vector)
+    v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
+    return v_norm
 
 def run(scf, sequence):
     cf = scf.cf
 
-    # takeoff to 0.5 m:
+    # takeoff from [0,0,0,0] to z=0.5 m:
     print('Takeoff...')
     sp = np.zeros(4)
     for i in range(50):
@@ -158,10 +153,9 @@ def run(scf, sequence):
     for goal in sequence:
         print('Going to', goal)
         while norm(goal[:3] - sp[:3]) > pos_tol or norm(goal[3] - sp[3]) > yaw_tol:
-            n = (goal[:3] - sp[:3]) / norm(goal[:3] - sp[:3])
-            yaw_n = (goal[3] - sp[3]) / norm(goal[3] - sp[3]) if norm(goal[3] - sp[3])!=0 else 0.0
-            sp[:3] += 0.03 * n
-            # sp[3] += 2 * yaw_n
+            n = normalize(goal[:3] - sp[:3])
+            sp[:3] += 0.03 * n # position setpoints
+            sp[3] += 3 * np.sign( goal[3] ) # yaw angle
             if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             time.sleep(0.1)
 
@@ -170,8 +164,6 @@ def run(scf, sequence):
         while time.time() - t0 < 2.0:
             if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             time.sleep(0.1)
-
-
 
 
     # land:
@@ -191,6 +183,6 @@ if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        reset_estimator(scf)
+        if toFly: reset_estimator(scf)
         # start_position_printing(scf)
         run(scf, sequence)
