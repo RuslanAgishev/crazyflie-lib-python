@@ -44,7 +44,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 
 # URI to the Crazyflie to connect to
 uri = 'radio://0/80/2M'
-toFly = 1
+toFly = 0
 
 # Change the sequence according to your setup
 #             x    y    z  YAW
@@ -60,8 +60,9 @@ sequence = [
     np.array([-0.8, 0.4, 1.3, 180]),
     np.array([-0.8, 0.0, 1.3, 0]),
     np.array([0.5, 0.2, 1.3, 0]),
-    np.array([0.0, 0.0, 0.1, 0]),
+    np.array([0.0, -0.4, 1.3, 0.0]),
 ]
+
 
 
 def wait_for_position_estimator(scf):
@@ -115,7 +116,6 @@ def reset_estimator(scf):
 
 
 def position_callback(timestamp, data, logconf):
-    print("position callback")
     x = data['kalman.stateX']
     y = data['kalman.stateY']
     z = data['kalman.stateZ']
@@ -140,11 +140,12 @@ def normalize(vector):
 def run(scf, sequence):
     cf = scf.cf
 
-    # takeoff from [0,0,0,0] to z=0.5 m:
+    # takeoff from [0,0,0,0] to z=1.3 m:
+    HEIGHT = 1.3
     print('Takeoff...')
     sp = np.zeros(4)
     for i in range(50):
-        sp[2] += 0.01
+        sp[2] += 0.026
         if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
         time.sleep(0.1)
 
@@ -166,11 +167,43 @@ def run(scf, sequence):
             if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             time.sleep(0.1)
 
+    # Figure 8
+    if toFly:
+        for _ in range(20):
+            cf.commander.send_hover_setpoint(0, 0, 0, HEIGHT)
+            time.sleep(0.1)
+
+        for _ in range(50):
+            cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, HEIGHT)
+            time.sleep(0.1)
+
+        for _ in range(50):
+            cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, HEIGHT)
+            time.sleep(0.1)
+
+        for _ in range(20):
+            cf.commander.send_hover_setpoint(0, 0, 0, HEIGHT)
+            time.sleep(0.1)
+
+    print('Going to home before landing...')
+    goal = np.array([0.0, 0.0, 0.3, 0])
+    while norm(goal[:3] - sp[:3]) > pos_tol or norm(sp[3]-goal[3]) > yaw_tol:
+        n = normalize(goal[:3] - sp[:3])
+        sp[:3] += 0.03 * n # position setpoints
+        sp[3] += 3 * np.sign( goal[3] - sp[3] ) # yaw angle
+        # print('Yaw', sp[3], 'yaw diff', norm(sp[3]-goal[3]))
+        if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+        time.sleep(0.1)
+
+    # hold position for 2 sec
+    t0 = time.time()
+    while time.time() - t0 < 2.0:
+        if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+        time.sleep(0.1)
 
     # land:
     print('Landing...')
     while sp[2]>-0.1:
-        print(sp[2])
         sp[2] -= 0.03
         if toFly: cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
         time.sleep(0.1)
@@ -186,5 +219,5 @@ if __name__ == '__main__':
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         if toFly: reset_estimator(scf)
-        # start_position_printing(scf)
+        start_position_printing(scf)
         run(scf, sequence)
