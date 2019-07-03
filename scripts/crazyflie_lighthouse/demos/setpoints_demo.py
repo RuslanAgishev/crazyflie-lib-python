@@ -44,7 +44,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 
 # URI to the Crazyflie to connect to
 uri = 'radio://0/80/2M'
-toFly = 1
+toFly = 0
 
 # Change the sequence according to your setup
 #             x    y    z  YAW
@@ -115,7 +115,6 @@ def reset_estimator(scf):
 
 
 def position_callback(timestamp, data, logconf):
-    print("position callback")
     x = data['kalman.stateX']
     y = data['kalman.stateY']
     z = data['kalman.stateZ']
@@ -185,6 +184,6 @@ if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
 
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        if toFly: reset_estimator(scf)
-        # start_position_printing(scf)
+        reset_estimator(scf)
+        start_position_printing(scf)
         run(scf, sequence)
