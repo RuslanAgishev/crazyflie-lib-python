@@ -43,31 +43,32 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.syncLogger import SyncLogger
 
 
-class Drone(object):
-    """docstring for Drone"""
+class Drone:
     def __init__(self, uri='radio://0/80/2M'):
         super(Drone, self).__init__()
         self.uri = uri # URI to the Crazyflie to connect to
         self.cf = SyncCrazyflie(self.uri, cf=Crazyflie(rw_cache='./cache')).cf
         self.pose = None
         self.sp = None
+        self.charged = False
 
     def fly(self):
         self.cf.commander.send_position_setpoint(self.sp[0], self.sp[1], self.sp[2], self.sp[3])
 
-    def takeoff(self):
-        # takeoff to z=0.5 m:
+    def takeoff(self, height=0.3):
+        # takeoff to z=0.3 m:
         print('Takeoff...')
         self.sp = np.zeros(4); self.sp[:3] = self.pose
-        for i in range(50):
-            self.sp[2] += 0.01
+        dz = 0.02
+        for i in range(int(height/dz)):
+            self.sp[2] += dz
             self.fly()
             time.sleep(0.1)
 
     def land(self):
         print('Landing...')
         while self.sp[2]>-0.1:
-            self.sp[2] -= 0.03
+            self.sp[2] -= 0.02
             self.fly()
             time.sleep(0.1)
 
@@ -85,23 +86,52 @@ class Drone(object):
             n = normalize(goal[:3] - self.sp[:3])
             self.sp[:3] += 0.03 * n # position setpoints
             self.sp[3] += 3 * np.sign( goal[3] - self.sp[3] ) # yaw angle
-            print('Yaw', self.sp[3], 'yaw diff', norm(self.sp[3]-goal[3]))
+            # print('Yaw', self.sp[3], 'yaw diff', norm(self.sp[3]-goal[3]))
             self.fly()
+            time.sleep(0.1)
+
+    def hover(self, t_hover=2):
+        t0 = time.time()
+        while time.time() - t0 < t_hover:
+            self.fly()
+            time.sleep(0.1)
+
+    def trajectory(self):
+        """ Figure 8 trajectory """
+        # 1-st circle
+        for _ in range(50):
+            self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+            time.sleep(0.1)
+        # 2-nd circle
+        for _ in range(50):
+            self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+            time.sleep(0.1)
+        # hover for 2 sec
+        for _ in range(20):
+            self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
             time.sleep(0.1)
 
     def position_callback(self, timestamp, data, logconf):
         x = data['kalman.stateX']
         y = data['kalman.stateY']
         z = data['kalman.stateZ']
-        self.pose = np.array([x,y,z])
-    def start_position_printing(self):
-        log_conf = LogConfig(name='Position', period_in_ms=50)
+        self.pose = np.array([x, y, z])
+    def start_position_reading(self):
+        log_conf = LogConfig(name='Position', period_in_ms=50) # read position with 20 Hz rate
         log_conf.add_variable('kalman.stateX', 'float')
         log_conf.add_variable('kalman.stateY', 'float')
         log_conf.add_variable('kalman.stateZ', 'float')
-
         self.cf.log.add_config(log_conf)
         log_conf.data_received_cb.add_callback(self.position_callback)
+        log_conf.start()
+
+    def battery_callback(self, timestamp, data, logconf):
+        self.V_bat = data['pm.vbat']
+    def start_battery_status_reading(self):
+        log_conf = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
+        log_conf.add_variable('pm.vbat', 'float')
+        self.cf.log.add_config(log_conf)
+        log_conf.data_received_cb.add_callback(self.battery_callback)
         log_conf.start()
 
 

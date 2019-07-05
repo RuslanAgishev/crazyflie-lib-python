@@ -51,6 +51,7 @@ if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
     drone = Drone(uri)
 
+    """ First mission """
     with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         drone.scf = scf
         reset_estimator(drone)
@@ -62,15 +63,60 @@ if __name__ == '__main__':
         print('Home position:', drone.pose_home)
         print('Battery status %.2f:' %drone.V_bat)
 
-        drone.takeoff(height=0.3)
-        drone.hover(1)
+        if drone.V_bat > 3.9:
+            drone.charged = True
+        else:
+            print('Battery is not charged %.2f:' %drone.V_bat)
+            drone.charged = False
 
-        """ Flight mission """
-        drone.goTo([0.5, -0.5, 0.3, 90])
-        drone.hover(1)
+        if drone.charged:
+            drone.takeoff(height=1.3)
+            drone.hover(1)
 
-        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
-        drone.hover(2)
+            """ Flight mission """
+            drone.goTo([0.8, -0.6, 1.3, 90])
+            drone.hover(1)
 
-        drone.land()
+            drone.goTo([-0.8, 0.4, 1.3, 180])
+            drone.hover(1)
+
+            drone.goTo([-0.8, 0.0, 1.3, 0])
+            drone.hover(1)
+
+            drone.goTo([0.5, 0.2, 1.3, 0])
+            drone.hover(1)
+
+            drone.goTo([0.0, -0.4, 1.3, 0.0])
+            drone.hover(1)
+
+            drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
+            drone.hover(2)
+
+            drone.land()
+            print('Battery status %.2f:' %drone.V_bat)
+
+
+    """ Second mission """
+    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        drone.scf = scf
+        reset_estimator(drone)
+        drone.start_position_reading()
+        drone.start_battery_status_reading() # 2 Hz
+        time.sleep(1)
+        
         print('Battery status %.2f:' %drone.V_bat)
+        if drone.V_bat > 3.5:
+            drone.charged = True
+        else:
+            print('Battery is not charged %.2f:' %drone.V_bat)
+            drone.charged = False
+
+        if drone.charged:
+            drone.takeoff(height=1.3)
+            drone.hover(1)
+
+            drone.trajectory()
+            drone.hover(1)
+
+            drone.land()
+            print('Battery status %.2f:' %drone.V_bat)
