@@ -43,14 +43,18 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.syncLogger import SyncLogger
 
 
+V_BATTERY_TO_GO_HOME = 3.5
+V_BATTERY_CHARGED = 3.8
+
 class Drone:
     def __init__(self, uri='radio://0/80/2M'):
         super(Drone, self).__init__()
         self.uri = uri # URI to the Crazyflie to connect to
         self.cf = SyncCrazyflie(self.uri, cf=Crazyflie(rw_cache='./cache')).cf
         self.pose = None
+        self.pose_home = np.array([0,0,0])
         self.sp = None
-        self.charged = False
+        self.battery_state = ''
 
     def fly(self):
         self.cf.commander.send_position_setpoint(self.sp[0], self.sp[1], self.sp[2], self.sp[3])
@@ -71,7 +75,6 @@ class Drone:
             self.sp[2] -= 0.02
             self.fly()
             time.sleep(0.1)
-
         self.stop()
         # Make sure that the last packet leaves before the link is closed
         # since the message queue is not flushed before closing
@@ -110,6 +113,23 @@ class Drone:
         for _ in range(20):
             self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
             time.sleep(0.1)
+    def trajectory_battery_check(self):
+        """ Figure 8 trajectory """
+        # 1-st circle
+        for _ in range(50):
+            if not self.battery_state == 'needs_charging':
+                self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+                time.sleep(0.1)
+        # 2-nd circle
+        for _ in range(50):
+            if not self.battery_state == 'needs_charging':
+                self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+                time.sleep(0.1)
+        # hover for 2 sec
+        for _ in range(20):
+            if not self.battery_state == 'needs_charging':
+                self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
+                time.sleep(0.1)
 
     def position_callback(self, timestamp, data, logconf):
         x = data['kalman.stateX']
@@ -127,6 +147,12 @@ class Drone:
 
     def battery_callback(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
+        # print('Battery status: %.2f [V]' %self.V_bat)
+        if self.V_bat <= V_BATTERY_TO_GO_HOME:
+            self.battery_state = 'needs_charging'
+            # print('Battery is not charged: %.2f' %self.V_bat)
+        elif self.V_bat >= V_BATTERY_CHARGED:
+            self.battery_state = 'fully_charged'
     def start_battery_status_reading(self):
         log_conf = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
         log_conf.add_variable('pm.vbat', 'float')
