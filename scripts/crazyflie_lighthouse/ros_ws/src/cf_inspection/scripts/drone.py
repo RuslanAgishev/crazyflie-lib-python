@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # -*- coding: utf-8 -*-
 #
 #     ||          ____  _ __
@@ -42,18 +44,25 @@ from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.syncLogger import SyncLogger
 
+# ROS
+import rospy
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+
 
 V_BATTERY_TO_GO_HOME = 3.4
-V_BATTERY_CHARGED = 3.9
+V_BATTERY_CHARGED = 3.7
 
 class Drone:
-    def __init__(self, uri='radio://0/80/2M'):
+    def __init__(self, uri='radio://0/80/2M/E7E7E7E7E7'):
         self.uri = uri # URI to the Crazyflie to connect to
+        self.id = self.uri[-2:]
         self.cf = SyncCrazyflie(self.uri, cf=Crazyflie(rw_cache='./cache')).cf
         self.pose = None
         self.pose_home = np.array([0,0,0])
         self.orient = None
         self.sp = None
+        self.path = Path()
         self.battery_state = ''
 
     def fly(self):
@@ -67,6 +76,7 @@ class Drone:
         for i in range(int(height/dz)):
             self.sp[2] += dz
             self.fly()
+            self.publish_sp()
             time.sleep(0.1)
 
     def land(self):
@@ -74,6 +84,7 @@ class Drone:
         while self.sp[2]>-0.1:
             self.sp[2] -= 0.02
             self.fly()
+            self.publish_sp()
             time.sleep(0.1)
         self.stop()
         # Make sure that the last packet leaves before the link is closed
@@ -91,12 +102,14 @@ class Drone:
             self.sp[3] += 3 * np.sign( goal[3] - self.sp[3] ) # yaw angle
             # print('Yaw', self.sp[3], 'yaw diff', norm(self.sp[3]-goal[3]))
             self.fly()
+            self.publish_sp()
             time.sleep(0.1)
 
     def hover(self, t_hover=2):
         t0 = time.time()
         while time.time() - t0 < t_hover:
             self.fly()
+            self.publish_sp()
             time.sleep(0.1)
 
     def trajectory(self):
@@ -130,7 +143,10 @@ class Drone:
             if not self.battery_state == 'needs_charging':
                 self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
                 time.sleep(0.1)
-
+    def publish_path(self, limit=200):
+        publish_path(self.path, self.sp[:3], self.orient, 'cf'+self.id+'_path', limit)
+    def publish_sp(self):
+        publish_pose(self.sp[:3], np.array([0,0,self.sp[3]]), 'cf'+self.id+'_sp')    
     def position_callback(self, timestamp, data, logconf):
         x = data['kalman.stateX']
         y = data['kalman.stateY']
@@ -140,6 +156,8 @@ class Drone:
         pitch = np.radians( data['stabilizer.pitch'] )
         yaw = np.radians( data['stabilizer.yaw'] )
         self.orient = np.array([roll, pitch, yaw])
+        # publish to ROS topic for visualization:
+        publish_pose(self.pose, self.orient, 'cf'+self.id+'_pose')
     def start_position_reading(self):
         log_conf = LogConfig(name='Position', period_in_ms=50) # read position with 20 Hz rate
         log_conf.add_variable('kalman.stateX', 'float')
@@ -173,3 +191,38 @@ def normalize(vector):
     vector = np.array(vector)
     v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
     return v_norm
+def euler_to_quaternion(roll, pitch, yaw):
+    qx = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+    qy = np.cos(roll/2) * np.sin(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.cos(pitch/2) * np.sin(yaw/2)
+    qz = np.cos(roll/2) * np.cos(pitch/2) * np.sin(yaw/2) - np.sin(roll/2) * np.sin(pitch/2) * np.cos(yaw/2)
+    qw = np.cos(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+    return [qx, qy, qz, qw]
+def msg_def_PoseStamped(pose, orient):
+    worldFrame = "map"
+    msg = PoseStamped()
+    msg.header.seq = 0
+    msg.header.stamp = rospy.Time.now()
+    msg.header.frame_id = worldFrame
+    msg.pose.position.x = pose[0]
+    msg.pose.position.y = pose[1]
+    msg.pose.position.z = pose[2]
+    quaternion = euler_to_quaternion(orient[0], orient[1], orient[2]) #1.57
+    msg.pose.orientation.x = quaternion[0]
+    msg.pose.orientation.y = quaternion[1]
+    msg.pose.orientation.z = quaternion[2]
+    msg.pose.orientation.w = quaternion[3]
+    msg.header.seq += 1
+    return msg
+
+def publish_pose(pose, orient, topic_name):
+    msg = msg_def_PoseStamped(pose, orient)
+    pub = rospy.Publisher(topic_name, PoseStamped, queue_size=1)
+    pub.publish(msg)
+def publish_path(path, pose, orient, topic_name, limit=1000):
+    msg = msg_def_PoseStamped(pose, orient)
+    path.header = msg.header
+    path.poses.append(msg)
+    if limit>0:
+        path.poses = path.poses[-limit:]
+    pub = rospy.Publisher(topic_name, Path, queue_size=1)
+    pub.publish(path)

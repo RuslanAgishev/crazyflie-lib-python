@@ -10,7 +10,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
-URI = 'radio://0/80/2M'
+URI = 'radio://0/80/2M/E7E7E7E702'
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
@@ -27,10 +27,10 @@ if __name__ == '__main__':
 
             # There is a set of functions that move a specific distance
             # We can move in all directions
-            mc.up(0.5)
+            mc.up(0.3)
             time.sleep(1)
 
-            mc.down(0.5)
+            mc.down(0.3)
             time.sleep(1)
 
             # And we can stop

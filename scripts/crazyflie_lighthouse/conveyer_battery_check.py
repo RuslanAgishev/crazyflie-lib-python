@@ -45,7 +45,7 @@ from drone import Drone
 
 
 # URI to the Crazyflie to connect to
-uri = 'radio://0/80/2M'
+uri = 'radio://0/80/2M/E7E7E7E702'
 
 if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
@@ -114,7 +114,6 @@ if __name__ == '__main__':
             drone.hover(2)
 
             drone.trajectory_battery_check()
-            drone.hover(1)
 
             print('Go home before landing...')
             drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # -*- coding: utf-8 -*-
 #
 #     ||          ____  _ __
@@ -43,11 +45,19 @@ from cflib.crazyflie import Crazyflie
 from tools import reset_estimator
 from drone import Drone
 
+import rospy
+
+
+def normalize(vector):
+    vector = np.array(vector)
+    v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
+    return v_norm
 
 # URI to the Crazyflie to connect to
 uri = 'radio://0/80/2M/E7E7E7E702'
 
 if __name__ == '__main__':
+    rospy.init_node('cf_control')
     cflib.crtp.init_drivers(enable_debug_driver=False)
     drone = Drone(uri)
 
@@ -62,15 +72,44 @@ if __name__ == '__main__':
         print('Home position:', drone.pose_home)
         print('Battery status: %.2f' %drone.V_bat)
 
-        drone.takeoff(height=0.3)
-        drone.hover(1)
 
-        """ Flight mission """
-        drone.goTo([0.5, -0.5, 0.3, 90])
-        drone.hover(1)
+        # takeoff to z=0.3 m:
+        height = 1.3
+        print('Takeoff...')
+        drone.sp = np.zeros(4); drone.sp[:3] = drone.pose
+        dz = 0.02
+        for i in range(int(height/dz)):
+            drone.sp[2] += dz
+            # drone.fly()
+            drone.publish_sp()
+            drone.publish_path()
+            time.sleep(0.1)
 
-        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
-        drone.hover(2)
+        # """ Flight mission """
+        goal = np.array([1.0, 0.0, 0.3, 0])
+        pos_tol = 0.03; yaw_tol = 3
+        print('Going to', goal)
+        while norm(goal[:3] - drone.sp[:3]) > pos_tol or norm(drone.sp[3]-goal[3]) > yaw_tol:
+            n = normalize(goal[:3] - drone.sp[:3])
+            drone.sp[:3] += 0.03 * n # position setpoints
+            drone.sp[3] += 3 * np.sign( goal[3] - drone.sp[3] ) # yaw angle
+            # drone.fly()
+            drone.publish_sp()
+            drone.publish_path()
+            time.sleep(0.1)
 
-        drone.land()
+
+        print('Landing...')
+        while drone.sp[2]>-0.1:
+            drone.sp[2] -= 0.02
+            # drone.fly()
+            drone.publish_sp()
+            drone.publish_path()
+            time.sleep(0.1)
+        drone.cf.commander.send_stop_setpoint()
+        # Make sure that the last packet leaves before the link is closed
+        # since the message queue is not flushed before closing
+        time.sleep(0.1)
+        
         print('Battery status %.2f:' %drone.V_bat)
+
