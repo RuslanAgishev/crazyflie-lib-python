@@ -48,6 +48,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+from std_msgs.msg import Float64
 
 
 V_BATTERY_TO_GO_HOME = 3.4
@@ -143,8 +144,10 @@ class Drone:
             if not self.battery_state == 'needs_charging':
                 self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
                 time.sleep(0.1)
-    def publish_path(self, limit=200):
+    def publish_path_sp(self, limit=200):
         publish_path(self.path, self.sp[:3], self.orient, 'cf'+self.id+'_path', limit)
+    def publish_path(self, limit=200):
+        publish_path(self.path, self.pose, self.orient, 'cf'+self.id+'_path', limit)
     def publish_sp(self):
         publish_pose(self.sp[:3], np.array([0,0,self.sp[3]]), 'cf'+self.id+'_sp')    
     def position_callback(self, timestamp, data, logconf):
@@ -172,6 +175,9 @@ class Drone:
 
     def battery_callback(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
+        # publish battery status as ROS msg
+        pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
+        pub.publish(self.V_bat)
         # print('Battery status: %.2f [V]' %self.V_bat)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'

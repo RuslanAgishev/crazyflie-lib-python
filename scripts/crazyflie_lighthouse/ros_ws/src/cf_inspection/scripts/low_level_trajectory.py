@@ -55,6 +55,8 @@ def normalize(vector):
 
 # URI to the Crazyflie to connect to
 uri = 'radio://0/80/2M/E7E7E7E702'
+toFly = 1
+
 
 if __name__ == '__main__':
     rospy.init_node('cf_control')
@@ -74,37 +76,37 @@ if __name__ == '__main__':
 
 
         # takeoff to z=0.3 m:
-        height = 1.3
+        height = 0.3
         print('Takeoff...')
         drone.sp = np.zeros(4); drone.sp[:3] = drone.pose
         dz = 0.02
         for i in range(int(height/dz)):
             drone.sp[2] += dz
-            # drone.fly()
+            if toFly: drone.fly()
             drone.publish_sp()
-            drone.publish_path()
+            drone.publish_path() if toFly else drone.publish_path_sp()
             time.sleep(0.1)
 
         # """ Flight mission """
-        goal = np.array([1.0, 0.0, 0.3, 0])
+        goal = np.array([0.5, 0.0, 0.3, 0])
         pos_tol = 0.03; yaw_tol = 3
         print('Going to', goal)
         while norm(goal[:3] - drone.sp[:3]) > pos_tol or norm(drone.sp[3]-goal[3]) > yaw_tol:
             n = normalize(goal[:3] - drone.sp[:3])
             drone.sp[:3] += 0.03 * n # position setpoints
             drone.sp[3] += 3 * np.sign( goal[3] - drone.sp[3] ) # yaw angle
-            # drone.fly()
+            if toFly: drone.fly()
             drone.publish_sp()
-            drone.publish_path()
+            drone.publish_path() if toFly else drone.publish_path_sp()
             time.sleep(0.1)
 
 
         print('Landing...')
         while drone.sp[2]>-0.1:
             drone.sp[2] -= 0.02
-            # drone.fly()
+            if toFly: drone.fly()
             drone.publish_sp()
-            drone.publish_path()
+            drone.publish_path() if toFly else drone.publish_path_sp()
             time.sleep(0.1)
         drone.cf.commander.send_stop_setpoint()
         # Make sure that the last packet leaves before the link is closed
