@@ -204,7 +204,7 @@ def euler_to_quaternion(roll, pitch, yaw):
     qw = np.cos(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
     return [qx, qy, qz, qw]
 def msg_def_PoseStamped(pose, orient):
-    worldFrame = "map"
+    worldFrame = "base_link"
     msg = PoseStamped()
     msg.header.seq = 0
     msg.header.stamp = rospy.Time.now()

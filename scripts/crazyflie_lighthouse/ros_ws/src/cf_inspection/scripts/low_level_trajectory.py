@@ -55,7 +55,7 @@ def normalize(vector):
 
 # URI to the Crazyflie to connect to
 uri = 'radio://0/80/2M/E7E7E7E702'
-toFly = 1
+toFly = 0
 
 
 if __name__ == '__main__':
