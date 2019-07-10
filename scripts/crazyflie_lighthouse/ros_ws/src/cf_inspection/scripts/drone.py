@@ -69,23 +69,25 @@ class Drone:
     def fly(self):
         self.cf.commander.send_position_setpoint(self.sp[0], self.sp[1], self.sp[2], self.sp[3])
 
-    def takeoff(self, height=0.3):
+    def takeoff(self, height=0.3, toFly=True):
         # takeoff to z=0.3 m:
         print('Takeoff...')
         self.sp = np.zeros(4); self.sp[:3] = self.pose
         dz = 0.02
         for i in range(int(height/dz)):
             self.sp[2] += dz
-            self.fly()
+            if toFly: self.fly()
             self.publish_sp()
+            self.publish_path() if toFly else self.publish_path_sp()
             time.sleep(0.1)
 
-    def land(self):
+    def land(self, toFly=True):
         print('Landing...')
         while self.sp[2]>-0.1:
             self.sp[2] -= 0.02
-            self.fly()
+            if toFly: self.fly()
             self.publish_sp()
+            self.publish_path() if toFly else self.publish_path_sp()
             time.sleep(0.1)
         self.stop()
         # Make sure that the last packet leaves before the link is closed
@@ -94,7 +96,7 @@ class Drone:
     def stop(self):
         self.cf.commander.send_stop_setpoint()
 
-    def goTo(self, goal, pos_tol=0.03, yaw_tol=3):
+    def goTo(self, goal, pos_tol=0.03, yaw_tol=3, toFly=True):
         goal = np.array(goal)
         print('Going to', goal)
         while norm(goal[:3] - self.sp[:3]) > pos_tol or norm(self.sp[3]-goal[3]) > yaw_tol:
@@ -102,47 +104,55 @@ class Drone:
             self.sp[:3] += 0.03 * n # position setpoints
             self.sp[3] += 3 * np.sign( goal[3] - self.sp[3] ) # yaw angle
             # print('Yaw', self.sp[3], 'yaw diff', norm(self.sp[3]-goal[3]))
-            self.fly()
+            if toFly: self.fly()
             self.publish_sp()
+            self.publish_path() if toFly else self.publish_path_sp()
             time.sleep(0.1)
 
-    def hover(self, t_hover=2):
+    def hover(self, t_hover=2, toFly=True):
         t0 = time.time()
         while time.time() - t0 < t_hover:
-            self.fly()
+            if toFly: self.fly()
             self.publish_sp()
+            self.publish_path() if toFly else self.publish_path_sp()
             time.sleep(0.1)
 
-    def trajectory(self):
+    def trajectory(self, toFly=True):
         """ Figure 8 trajectory """
         # 1-st circle
         for _ in range(50):
-            self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+            if toFly: self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+            self.publish_path()
             time.sleep(0.1)
         # 2-nd circle
         for _ in range(50):
-            self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+            if toFly: self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+            self.publish_path()
             time.sleep(0.1)
         # hover for 2 sec
         for _ in range(20):
-            self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
+            if toFly: self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
+            self.publish_path()
             time.sleep(0.1)
-    def trajectory_battery_check(self):
+    def trajectory_battery_check(self, toFly=True):
         """ Figure 8 trajectory """
         # 1-st circle
         for _ in range(50):
             if not self.battery_state == 'needs_charging':
-                self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+                if toFly: self.cf.commander.send_hover_setpoint(0.5, 0, 36 * 2, 1.3)
+                self.publish_path()
                 time.sleep(0.1)
         # 2-nd circle
         for _ in range(50):
             if not self.battery_state == 'needs_charging':
-                self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+                if toFly: self.cf.commander.send_hover_setpoint(0.5, 0, -36 * 2, 1.3)
+                self.publish_path()
                 time.sleep(0.1)
         # hover for 2 sec
         for _ in range(20):
             if not self.battery_state == 'needs_charging':
-                self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
+                if toFly: self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
+                self.publish_path()
                 time.sleep(0.1)
     def publish_path_sp(self, limit=200):
         publish_path(self.path, self.sp[:3], self.orient, 'cf'+self.id+'_path', limit)
@@ -224,7 +234,7 @@ def publish_pose(pose, orient, topic_name):
     msg = msg_def_PoseStamped(pose, orient)
     pub = rospy.Publisher(topic_name, PoseStamped, queue_size=1)
     pub.publish(msg)
-def publish_path(path, pose, orient, topic_name, limit=1000):
+def publish_path(path, pose, orient, topic_name, limit=-1):
     msg = msg_def_PoseStamped(pose, orient)
     path.header = msg.header
     path.poses.append(msg)

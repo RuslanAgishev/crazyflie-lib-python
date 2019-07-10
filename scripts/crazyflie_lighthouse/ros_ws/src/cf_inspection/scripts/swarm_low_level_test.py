@@ -34,6 +34,7 @@ This example is intended to work with the Loco Positioning System in TWR TOA
 mode. It aims at documenting how to set the Crazyflie in position control mode
 and how to send setpoints.
 """
+import threading
 import time
 import numpy as np
 from numpy.linalg import norm
@@ -54,15 +55,23 @@ def normalize(vector):
     return v_norm
 
 # URI to the Crazyflie to connect to
-uri = 'radio://0/80/2M/E7E7E7E701'
+URI1 = 'radio://0/80/2M/E7E7E7E701'
+URI2 = 'radio://0/80/2M/E7E7E7E702'
+
+waypoints1 = [
+    np.array([0.5, 0.0, 0.3, 0]),
+    np.array([0.5, 0.0, 1.0, 0]),
+    np.array([0.0, 0.0, 0.3, 0]),
+]
+waypoints2 = [
+    np.array([0.0, -0.5, 0.3, 0]),
+    np.array([0.5, -0.5, 0.6, 0]),
+    np.array([-0.5, 0.5, 0.3, 0]),
+]
+
 toFly = 0
 
-
-if __name__ == '__main__':
-    rospy.init_node('cf_control')
-    cflib.crtp.init_drivers(enable_debug_driver=False)
-    drone = Drone(uri)
-
+def run_sequence(drone, waypoints):
     with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         drone.scf = scf
         reset_estimator(drone)
@@ -74,44 +83,26 @@ if __name__ == '__main__':
         print('Home position:', drone.pose_home)
         print('Battery status: %.2f' %drone.V_bat)
 
-
         # takeoff to z=0.3 m:
-        height = 0.3
-        print('Takeoff...')
-        drone.sp = np.zeros(4); drone.sp[:3] = drone.pose
-        dz = 0.02
-        for i in range(int(height/dz)):
-            drone.sp[2] += dz
-            if toFly: drone.fly()
-            drone.publish_sp()
-            drone.publish_path() if toFly else drone.publish_path_sp()
-            time.sleep(0.1)
+        drone.takeoff(toFly=toFly)
 
         # """ Flight mission """
-        goal = np.array([0.5, 0.0, 0.3, 0])
-        pos_tol = 0.03; yaw_tol = 3
-        print('Going to', goal)
-        while norm(goal[:3] - drone.sp[:3]) > pos_tol or norm(drone.sp[3]-goal[3]) > yaw_tol:
-            n = normalize(goal[:3] - drone.sp[:3])
-            drone.sp[:3] += 0.03 * n # position setpoints
-            drone.sp[3] += 3 * np.sign( goal[3] - drone.sp[3] ) # yaw angle
-            if toFly: drone.fly()
-            drone.publish_sp()
-            drone.publish_path() if toFly else drone.publish_path_sp()
-            time.sleep(0.1)
+        for goal in waypoints:
+            drone.goTo(goal, toFly=toFly)
 
 
-        print('Landing...')
-        while drone.sp[2]>-0.1:
-            drone.sp[2] -= 0.02
-            if toFly: drone.fly()
-            drone.publish_sp()
-            drone.publish_path() if toFly else drone.publish_path_sp()
-            time.sleep(0.1)
-        drone.cf.commander.send_stop_setpoint()
-        # Make sure that the last packet leaves before the link is closed
-        # since the message queue is not flushed before closing
-        time.sleep(0.1)
+        drone.land(toFly=toFly)
         
         print('Battery status %.2f:' %drone.V_bat)
 
+
+if __name__ == '__main__':
+    rospy.init_node('cf_control')
+    cflib.crtp.init_drivers(enable_debug_driver=False)
+    drone1 = Drone(URI1)
+    drone2 = Drone(URI2)
+
+    threading.Thread(target=run_sequence, args=(drone1, waypoints1,)).start()
+    threading.Thread(target=run_sequence, args=(drone2, waypoints2,)).start()
+
+    

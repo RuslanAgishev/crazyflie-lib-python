@@ -65,6 +65,11 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        tube:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: ""
@@ -76,13 +81,19 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        base_link:
+          Value: true
+        tube:
+          Value: true
       Marker Scale: 0.5
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        base_link:
+          tube:
+            {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -90,6 +101,44 @@ Visualization Manager:
       Axes Radius: 0.100000001
       Class: rviz/Pose
       Color: 255; 255; 0
+      Enabled: true
+      Head Length: 0.100000001
+      Head Radius: 0.100000001
+      Name: Pose
+      Shaft Length: 0.0500000007
+      Shaft Radius: 0.0500000007
+      Shape: Arrow
+      Topic: /cf01_sp
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 255; 0
+      Enabled: true
+      Head Diameter: 0.300000012
+      Head Length: 0.200000003
+      Length: 0.300000012
+      Line Style: Lines
+      Line Width: 0.0299999993
+      Name: Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.0299999993
+      Shaft Diameter: 0.100000001
+      Shaft Length: 0.100000001
+      Topic: /cf01_path
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.100000001
+      Class: rviz/Pose
+      Color: 0; 255; 127
       Enabled: true
       Head Length: 0.100000001
       Head Radius: 0.100000001
@@ -163,10 +212,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 0.475397229
+      Pitch: 0.940396786
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.98676205
+      Yaw: 5.26176405
     Saved: ~
 Window Geometry:
   Displays:

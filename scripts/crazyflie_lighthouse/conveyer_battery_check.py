@@ -41,32 +41,34 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 
 from tools import reset_estimator
-from drone import Drone
+from drone1 import drone1
 
 
 # URI to the Crazyflie to connect to
-uri = 'radio://0/80/2M/E7E7E7E702'
+uri1 = 'radio://0/80/2M/E7E7E7E701'
+uri2 = 'radio://0/80/2M/E7E7E7E702'
 
 if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
-    drone = Drone(uri)
+    drone1 = drone1(uri1)
+    drone2 = drone1(uri2)
 
     """ First mission """
-    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone.scf = scf
-        reset_estimator(drone)
-        drone.start_position_reading() # 20 Hz
-        drone.start_battery_status_reading() # 2 Hz
+    with SyncCrazyflie(drone1.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        drone1.scf = scf
+        reset_estimator(drone1)
+        drone1.start_position_reading() # 20 Hz
+        drone1.start_battery_status_reading() # 2 Hz
         time.sleep(1)
 
-        drone.pose_home = drone.pose
-        print('Home position:', drone.pose_home)
-        print('Battery status %.2f:' %drone.V_bat)
+        drone1.pose_home = drone1.pose
+        print('Home position:', drone1.pose_home)
+        print('Battery status %.2f:' %drone1.V_bat)
 
-        if drone.battery_state == 'fully_charged':
-            print('Drone is ready for takeoff')
-            drone.takeoff(height=0.3)
-            drone.hover(1)
+        if drone1.battery_state == 'fully_charged':
+            print('drone1 is ready for takeoff')
+            drone1.takeoff(height=0.3)
+            drone1.hover(1)
 
             """ Flight mission """
             wp_sequence = [
@@ -83,40 +85,40 @@ if __name__ == '__main__':
             #               ]
 
             for waypoint in wp_sequence:
-                if not drone.battery_state == 'needs_charging':
-                    drone.goTo(waypoint)
-                    drone.hover(1)
+                if not drone1.battery_state == 'needs_charging':
+                    drone1.goTo(waypoint)
+                    drone1.hover(1)
 
             print('Go home before landing...')
-            drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
-            drone.hover(2)
-            drone.land()
-            print('Battery status: %.2f [V]' %drone.V_bat)
+            drone1.goTo([drone1.pose_home[0], drone1.pose_home[1], 0.3, 0])
+            drone1.hover(2)
+            drone1.land()
+            print('Battery status: %.2f [V]' %drone1.V_bat)
 
 
     """ Second mission """
-    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone.scf = scf
-        reset_estimator(drone)
-        drone.start_position_reading()
-        drone.start_battery_status_reading() # 2 Hz
+    with SyncCrazyflie(drone2.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        drone2.scf = scf
+        reset_estimator(drone2)
+        drone2.start_position_reading()
+        drone2.start_battery_status_reading() # 2 Hz
         time.sleep(1)
 
-        drone.pose_home = drone.pose
-        print('Home position:', drone.pose_home)
-        print('Battery status %.2f:' %drone.V_bat)
+        drone2.pose_home = drone2.pose
+        print('Home position:', drone2.pose_home)
+        print('Battery status %.2f:' %drone2.V_bat)
 
-        if drone.battery_state == 'fully_charged':
-            drone.takeoff(height=0.3)
-            drone.hover(1)
+        if drone2.battery_state == 'fully_charged':
+            drone2.takeoff(height=0.3)
+            drone2.hover(1)
 
-            drone.goTo([0.0, -0.3, 1.3, 0])
-            drone.hover(2)
+            drone2.goTo([0.0, -0.3, 1.3, 0])
+            drone2.hover(2)
 
-            drone.trajectory_battery_check()
+            drone2.trajectory_battery_check()
 
             print('Go home before landing...')
-            drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
-            drone.hover(2)
-            drone.land()
-            print('Battery status: %.2f [V]' %drone.V_bat)
+            drone2.goTo([drone2.pose_home[0], drone2.pose_home[1], 0.3, 0])
+            drone2.hover(2)
+            drone2.land()
+            print('Battery status: %.2f [V]' %drone2.V_bat)

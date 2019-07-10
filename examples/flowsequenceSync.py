@@ -37,7 +37,7 @@ import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 
-URI = 'radio://0/80/250K'
+URI = 'radio://0/80/2M/E7E7E7E701'
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)
