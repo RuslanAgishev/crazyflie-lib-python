@@ -85,14 +85,18 @@ def run_sequence(drone, waypoints):
 
         # takeoff to z=0.3 m:
         drone.takeoff(toFly=toFly)
+        drone.hover(1, toFly=toFly)
 
         # """ Flight mission """
         for goal in waypoints:
             drone.goTo(goal, toFly=toFly)
+            drone.hover(1, toFly=toFly)
 
+        print('Go home before landing...')
+        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0], toFly=toFly)
+        drone.hover(2, toFly=toFly)
 
         drone.land(toFly=toFly)
-        
         print('Battery status %.2f:' %drone.V_bat)
 
 

@@ -41,7 +41,7 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 
 from tools import reset_estimator
-from drone1 import drone1
+from drone import Drone
 
 
 # URI to the Crazyflie to connect to
