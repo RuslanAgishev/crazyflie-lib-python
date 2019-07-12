@@ -49,7 +49,7 @@ from drone import Drone
 import rospy
 
 
-toFly = 1
+toFly = 0
 
 
 def normalize(vector):
@@ -63,7 +63,7 @@ URI2 = 'radio://0/80/2M/E7E7E7E702'
 
 waypoints1 = [
     np.array([0.5, 0.0, 0.3, 0]),
-    np.array([0.5, 0.0, 1.0, 0]),
+    np.array([0.5, 0.0, 1.3, 0]),
     np.array([0.0, 0.0, 0.3, 0]),
 ]
 waypoints2 = [
@@ -106,9 +106,9 @@ if __name__ == '__main__':
     rospy.init_node('cf_control')
     cflib.crtp.init_drivers(enable_debug_driver=False)
     drone1 = Drone(URI1)
-    # drone2 = Drone(URI2)
+    drone2 = Drone(URI2)
 
     threading.Thread(target=run_sequence, args=(drone1, waypoints1,)).start()
-    # threading.Thread(target=run_sequence, args=(drone2, waypoints2,)).start()
+    threading.Thread(target=run_sequence, args=(drone2, waypoints2,)).start()
 
     

@@ -52,7 +52,7 @@ from std_msgs.msg import Float64
 
 
 V_BATTERY_TO_GO_HOME = 3.4
-V_BATTERY_CHARGED = 3.7
+V_BATTERY_CHARGED = 3.8
 
 class Drone:
     def __init__(self, uri='radio://0/80/2M/E7E7E7E7E7'):
@@ -99,6 +99,8 @@ class Drone:
     def goTo(self, goal, pos_tol=0.03, yaw_tol=3, toFly=True):
         goal = np.array(goal)
         print('Going to', goal)
+        if self.sp is None:
+            self.sp = np.zeros(4); self.sp[:3] = self.pose
         while norm(goal[:3] - self.sp[:3]) > pos_tol or norm(self.sp[3]-goal[3]) > yaw_tol:
             n = normalize(goal[:3] - self.sp[:3])
             self.sp[:3] += 0.03 * n # position setpoints
@@ -191,7 +193,7 @@ class Drone:
         # print('Battery status: %.2f [V]' %self.V_bat)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
-            # print('Battery is not charged: %.2f' %self.V_bat)
+            print('Battery is not charged: %.2f' %self.V_bat)
         elif self.V_bat >= V_BATTERY_CHARGED:
             self.battery_state = 'fully_charged'
     def start_battery_status_reading(self):

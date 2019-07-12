@@ -50,7 +50,7 @@ SENSOR_TH = 1500
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 1.0
 # Battery voltage to land
-BATTERY_LAND = 3.7  
+BATTERY_LAND = 3.5  
 
 def is_close(range):
     MIN_DISTANCE = 300  # mm
