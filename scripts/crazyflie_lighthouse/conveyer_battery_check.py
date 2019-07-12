@@ -46,12 +46,13 @@ from drone import Drone
 
 # URI to the Crazyflie to connect to
 uri1 = 'radio://0/80/2M/E7E7E7E701'
-uri2 = 'radio://0/80/2M/E7E7E7E702'
+uri2 = 'radio://0/80/2M/E7E7E7E701'
+# uri2 = 'radio://0/80/2M/E7E7E7E702'
 
 if __name__ == '__main__':
     cflib.crtp.init_drivers(enable_debug_driver=False)
-    drone1 = drone1(uri1)
-    drone2 = drone1(uri2)
+    drone1 = Drone(uri1)
+    drone2 = Drone(uri2)
 
     """ First mission """
     with SyncCrazyflie(drone1.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
@@ -109,8 +110,10 @@ if __name__ == '__main__':
         print('Battery status %.2f:' %drone2.V_bat)
 
         if drone2.battery_state == 'fully_charged':
-            drone2.takeoff(height=0.3)
-            drone2.hover(1)
+            # drone2.takeoff(height=0.3)
+            # drone2.hover(1)
+            drone2.goTo([0.0, -0.3, 0.3, 0.0])
+            drone2.hover(2)
 
             drone2.goTo([0.0, -0.3, 1.3, 0])
             drone2.hover(2)

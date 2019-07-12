@@ -34,7 +34,6 @@ This example is intended to work with the Loco Positioning System in TWR TOA
 mode. It aims at documenting how to set the Crazyflie in position control mode
 and how to send setpoints.
 """
-import threading
 import time
 import numpy as np
 from numpy.linalg import norm
@@ -47,10 +46,13 @@ from tools import reset_estimator
 from drone import Drone
 
 import rospy
+import thread
 
 
-toFly = 1
-
+def input_thread(a_list):
+    raw_input()
+    a_list.append(True)
+    print('Trajectory is recorded.')
 
 def normalize(vector):
     vector = np.array(vector)
@@ -58,57 +60,42 @@ def normalize(vector):
     return v_norm
 
 # URI to the Crazyflie to connect to
-URI1 = 'radio://0/80/2M/E7E7E7E701'
-URI2 = 'radio://0/80/2M/E7E7E7E702'
-
-waypoints1 = [
-    np.array([0.5, 0.0, 0.3, 0]),
-    np.array([0.5, 0.0, 1.0, 0]),
-    np.array([0.0, 0.0, 0.3, 0]),
-]
-waypoints2 = [
-    np.array([0.0, -0.5, 0.3, 0]),
-    np.array([0.5, -0.5, 0.6, 0]),
-    np.array([-0.5, 0.5, 0.3, 0]),
-]
-
-
-def run_sequence(drone, waypoints):
-    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone.scf = scf
-        reset_estimator(drone)
-        drone.start_position_reading() # 20 Hz
-        drone.start_battery_status_reading() # 2 Hz
-        time.sleep(1)
-
-        drone.pose_home = drone.pose
-        print('Home position:', drone.pose_home)
-        print('Battery status: %.2f' %drone.V_bat)
-
-        # takeoff to z=0.3 m:
-        drone.takeoff(toFly=toFly)
-        drone.hover(1, toFly=toFly)
-
-        # """ Flight mission """
-        for goal in waypoints:
-            drone.goTo(goal, toFly=toFly)
-            drone.hover(1, toFly=toFly)
-
-        print('Go home before landing...')
-        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0], toFly=toFly)
-        drone.hover(2, toFly=toFly)
-
-        drone.land(toFly=toFly)
-        print('Battery status %.2f:' %drone.V_bat)
+uri = 'radio://0/80/2M/E7E7E7E701'
+toFly = 1
 
 
 if __name__ == '__main__':
     rospy.init_node('cf_control')
     cflib.crtp.init_drivers(enable_debug_driver=False)
-    drone1 = Drone(URI1)
-    # drone2 = Drone(URI2)
+    drone = Drone(uri)
 
-    threading.Thread(target=run_sequence, args=(drone1, waypoints1,)).start()
-    # threading.Thread(target=run_sequence, args=(drone2, waypoints2,)).start()
+    traj = []
+    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        drone.scf = scf
+        reset_estimator(drone)
+        drone.start_position_reading() # 20 Hz
+        time.sleep(0.5)
 
-    
+        drone.pose_home = drone.pose
+        print('Home position:', drone.pose_home)
+
+        rate = rospy.Rate(10)
+        trajectory = []
+        stop_recording = []
+        thread.start_new_thread(input_thread, (stop_recording,))
+        print('Started trajectory recoridng')
+        while not stop_recording:
+            drone.publish_path()
+            trajectory.append( drone.pose )
+            rate.sleep()
+            
+        # Execute recorded trajectory
+        drone.sp = np.zeros(4)
+        print('Executing recorded trajectory')
+        for i in range(len(trajectory)):
+            drone.sp[:3] = trajectory[i]
+            if toFly: drone.fly()
+            drone.publish_sp()
+            drone.publish_path() if toFly else drone.publish_path_sp()
+            time.sleep(0.1)
+
