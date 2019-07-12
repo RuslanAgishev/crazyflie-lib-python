@@ -44,7 +44,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 
 
 V_BATTERY_TO_GO_HOME = 3.4
-V_BATTERY_CHARGED = 3.9
+V_BATTERY_CHARGED = 3.7
 
 class Drone:
     def __init__(self, uri='radio://0/80/2M'):
@@ -85,6 +85,8 @@ class Drone:
     def goTo(self, goal, pos_tol=0.03, yaw_tol=3):
         goal = np.array(goal)
         print('Going to', goal)
+        if self.sp is None:
+            self.sp = np.zeros(4); self.sp[:3] = self.pose
         while norm(goal[:3] - self.sp[:3]) > pos_tol or norm(self.sp[3]-goal[3]) > yaw_tol:
             n = normalize(goal[:3] - self.sp[:3])
             self.sp[:3] += 0.03 * n # position setpoints
