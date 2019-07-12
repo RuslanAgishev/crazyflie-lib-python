@@ -52,6 +52,7 @@ SPEED_FACTOR = 1.0
 # Battery voltage to land
 BATTERY_LAND = 3.5  
 
+
 def is_close(range):
     MIN_DISTANCE = 300  # mm
 
@@ -86,10 +87,14 @@ class MainWindow(QtGui.QMainWindow):
         self.cf.open_link(URI)
 
         self.motion_commander = MotionCommander(self.cf)
+        self.high_level_commander = HighLevelCommander(self.cf)
         self.multiranger = Multiranger(self.cf)
-        self.KEEP_FLYING = True
         time.sleep(2)
+
         self.motion_commander.take_off(0.2, 0.2)
+        self.x_home = self.position[0]
+        self.y_home = self.position[1]
+        print('Home position:', self.x_home, self.y_home)
         time.sleep(1)
         self.motion_commander.start_forward(0.10 * SPEED_FACTOR)
         time.sleep(0.5)
@@ -102,16 +107,18 @@ class MainWindow(QtGui.QMainWindow):
 
 
     def sendHoverCommand(self):
-        # print(f"range.up = {self.measurement['up']}")
         print(f"range.front = {self.measurement['front']}")
         print(f"range.left = {self.measurement['left']}")
         print(f"range.right = {self.measurement['right']}")
-        # print(f"is_close(up) = {is_close(self.measurement['up'])}")
         if self.V_bat < BATTERY_LAND:
-            print('Landing')
+            # current_pose = self.position
+            # current_yaw = get current yaw
+            # self.motion_commander.turn_left(till current yaw)
+            # self.motion_commander.move_distance(home_pose - current_pose)
+            print('Landing...')
             self.motion_commander.land(0.1)
             time.sleep(0.5)
-            self.motion_commander.stop()
+            
         if is_close(self.measurement['front']):
             self.motion_commander.turn_right(90, 180)
             time.sleep(0.1)
@@ -150,7 +157,6 @@ class MainWindow(QtGui.QMainWindow):
         lpos.add_variable('stateEstimate.x')
         lpos.add_variable('stateEstimate.y')
         lpos.add_variable('stateEstimate.z')
-
         try:
             self.cf.log.add_config(lpos)
             lpos.data_received_cb.add_callback(self.pos_data)
@@ -171,7 +177,6 @@ class MainWindow(QtGui.QMainWindow):
         lmeas.add_variable('stabilizer.roll')
         lmeas.add_variable('stabilizer.pitch')
         lmeas.add_variable('stabilizer.yaw')
-
         try:
             self.cf.log.add_config(lmeas)
             lmeas.data_received_cb.add_callback(self.meas_data)
