@@ -60,23 +60,6 @@ def reset_estimator(drone):
     wait_for_position_estimator(drone.cf)
 
 
-def position_callback(timestamp, data, logconf):
-    x = data['kalman.stateX']
-    y = data['kalman.stateY']
-    z = data['kalman.stateZ']
-    print('pos: ({}, {}, {})'.format(x, y, z))
-
-
-def start_position_printing(drone):
-    log_conf = LogConfig(name='Position', period_in_ms=50)
-    log_conf.add_variable('kalman.stateX', 'float')
-    log_conf.add_variable('kalman.stateY', 'float')
-    log_conf.add_variable('kalman.stateZ', 'float')
-
-    drone.scf.cf.log.add_config(log_conf)
-    log_conf.data_received_cb.add_callback(position_callback)
-    log_conf.start()
-
 def normalize(vector):
     vector = np.array(vector)
     v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)

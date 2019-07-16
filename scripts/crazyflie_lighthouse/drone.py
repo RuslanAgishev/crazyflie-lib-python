@@ -101,7 +101,7 @@ class Drone:
             self.fly()
             time.sleep(0.1)
 
-    def trajectory(self):
+    def trajectory_figure8(self):
         """ Figure 8 trajectory """
         # 1-st circle
         for _ in range(50):
