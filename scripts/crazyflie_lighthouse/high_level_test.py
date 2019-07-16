@@ -40,8 +40,7 @@ import cflib.crtp
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 
-from tools import reset_estimator
-from drone import Drone
+from drone import Drone, reset_estimator
 
 
 # URI to the Crazyflie to connect to

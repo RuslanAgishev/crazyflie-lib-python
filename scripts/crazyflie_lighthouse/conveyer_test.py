@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # -*- coding: utf-8 -*-
 #
 #     ||          ____  _ __
@@ -28,10 +30,11 @@ Simple example that connects to crazyflies one by one (check the addresses at th
 and update it to your crazyflies addresses) and sends a mission: sequence of setpoints
 or figure8 trajectory.
 
-This example is intended to work with the Loco- or Lighthouse Positioning System.
-It aims at documenting how to set the Crazyflie in position control mode
+This example is intended to work with the Loco Positioning System in TWR TOA
+mode. It aims at documenting how to set the Crazyflie in position control mode
 and how to send setpoints.
 """
+import threading
 import time
 import numpy as np
 from numpy.linalg import norm
@@ -44,25 +47,33 @@ from drone import Drone, reset_estimator
 
 
 # URI to the Crazyflie to connect to
-uri1 = 'radio://0/80/2M/E7E7E7E701'
-uri2 = 'radio://0/80/2M/E7E7E7E702'
-uri3 = 'radio://0/80/2M/E7E7E7E703'
+URI1 = 'radio://0/80/2M/E7E7E7E701'
+URI2 = 'radio://0/80/2M/E7E7E7E702'
+URI3 = 'radio://0/80/2M/E7E7E7E703'
+
+def connect(drone):
+    with SyncCrazyflie(drone.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        drone.scf = scf
+        reset_estimator(drone)
+        drone.start_position_reading() # 20 Hz
+        drone.start_battery_status_reading() # 2 Hz
+        time.sleep(1)
+        drone.pose_home = drone.pose
 
 if __name__ == '__main__':
+    rospy.init_node('cf_control')
     cflib.crtp.init_drivers(enable_debug_driver=False)
-    drone1 = Drone(uri1)
-    drone2 = Drone(uri2)
-    drone3 = Drone(uri3)
+    drone1 = Drone(URI1)
+    drone2 = Drone(URI2)
+    drone3 = Drone(URI3)
 
+    threading.Thread(target=connect, args=(drone1,)).start()
+    threading.Thread(target=connect, args=(drone2,)).start()
+    threading.Thread(target=connect, args=(drone3,)).start()
+
+    
     """ First mission """
     with SyncCrazyflie(drone1.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone1.scf = scf
-        reset_estimator(drone1)
-        drone1.start_position_reading() # 20 Hz
-        drone1.start_battery_status_reading() # 2 Hz
-        time.sleep(1)
-
-        drone1.pose_home = drone1.pose
         print('Home position:', drone1.pose_home)
         print('Battery status %.2f:' %drone1.V_bat)
 
@@ -96,13 +107,6 @@ if __name__ == '__main__':
 
     """ Second mission """
     with SyncCrazyflie(drone2.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone2.scf = scf
-        reset_estimator(drone2)
-        drone2.start_position_reading()
-        drone2.start_battery_status_reading() # 2 Hz
-        time.sleep(1)
-
-        drone2.pose_home = drone2.pose
         print('Home position:', drone2.pose_home)
         print('Battery status %.2f:' %drone2.V_bat)
 
@@ -121,15 +125,10 @@ if __name__ == '__main__':
         drone2.land()
         print('Battery status: %.2f [V]' %drone2.V_bat)
 
+
+
     """ Fird mission """
     with SyncCrazyflie(drone3.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone3.scf = scf
-        reset_estimator(drone3)
-        drone3.start_position_reading()
-        drone3.start_battery_status_reading() # 2 Hz
-        time.sleep(1)
-
-        drone3.pose_home = drone3.pose
         print('Home position:', drone3.pose_home)
         print('Battery status %.2f:' %drone3.V_bat)
 
