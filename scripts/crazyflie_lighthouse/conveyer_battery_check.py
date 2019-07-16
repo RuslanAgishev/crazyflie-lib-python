@@ -118,7 +118,7 @@ if __name__ == '__main__':
             drone2.goTo([0.0, -0.3, 1.3, 0])
             drone2.hover(2)
 
-            drone2.trajectory_battery_check()
+            drone2.trajectory_figure8_battery_check()
 
             print('Go home before landing...')
             drone2.goTo([drone2.pose_home[0], drone2.pose_home[1], 0.3, 0])

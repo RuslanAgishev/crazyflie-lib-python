@@ -44,7 +44,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 
 
 V_BATTERY_TO_GO_HOME = 3.4
-V_BATTERY_CHARGED = 3.9
+V_BATTERY_CHARGED = 3.85
 
 class Drone:
     def __init__(self, uri='radio://0/80/2M'):
@@ -115,7 +115,7 @@ class Drone:
         for _ in range(20):
             self.cf.commander.send_hover_setpoint(0, 0, 0, 1.3)
             time.sleep(0.1)
-    def trajectory_battery_check(self):
+    def trajectory_figure8_battery_check(self):
         """ Figure 8 trajectory """
         # 1-st circle
         for _ in range(50):
