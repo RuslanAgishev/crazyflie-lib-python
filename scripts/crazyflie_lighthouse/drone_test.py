@@ -12,8 +12,8 @@ from cflib.positioning.motion_commander import MotionCommander
 
 import sys
 
-if len(sys.arg)>1:
-    URI = sys.arg[1]
+if len(sys.argv)>1:
+    URI = sys.argv[1]
 else:
     URI = 'radio://0/80/2M/E7E7E7E701'
 
