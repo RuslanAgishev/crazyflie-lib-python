@@ -49,7 +49,7 @@ from drone import Drone
 import rospy
 
 
-toFly = 0
+toFly = 1
 
 
 def normalize(vector):
@@ -58,18 +58,18 @@ def normalize(vector):
     return v_norm
 
 # URI to the Crazyflie to connect to
-URI1 = 'radio://0/80/2M/E7E7E7E701'
-URI2 = 'radio://0/80/2M/E7E7E7E702'
+URI1 = 'radio://0/80/2M/E7E7E7E702'
+URI2 = 'radio://0/80/2M/E7E7E7E703'
 
 waypoints1 = [
     np.array([0.5, 0.0, 0.3, 0]),
-    np.array([0.5, 0.0, 1.3, 0]),
-    np.array([0.0, 0.0, 0.3, 0]),
+    np.array([0.5, 0.0, 1.1, 0]),
+    np.array([0.0, 0.2, 0.3, 0]),
 ]
 waypoints2 = [
     np.array([0.0, -0.5, 0.3, 0]),
-    np.array([0.5, -0.5, 0.6, 0]),
-    np.array([-0.5, 0.5, 0.3, 0]),
+    np.array([0.5, -0.5, 0.9, 0]),
+    np.array([0.1, -0.2, 0.3, 0]),
 ]
 
 

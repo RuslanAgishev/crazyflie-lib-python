@@ -244,3 +244,4 @@ def publish_path(path, pose, orient, topic_name, limit=-1):
         path.poses = path.poses[-limit:]
     pub = rospy.Publisher(topic_name, Path, queue_size=1)
     pub.publish(path)
+

@@ -43,28 +43,24 @@ import cflib.crtp
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 
-from drone import Drone, reset_estimator
+from tools import reset_estimator
+from drone import Drone
 
 
-
-def normalize(vector):
-    vector = np.array(vector)
-    v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
-    return v_norm
 
 # URI to the Crazyflie to connect to
-URI1 = 'radio://0/80/2M/E7E7E7E701'
-URI2 = 'radio://0/80/2M/E7E7E7E702'
+URI1 = 'radio://0/80/2M/E7E7E7E702'
+URI2 = 'radio://0/80/2M/E7E7E7E703'
 
 waypoints1 = [
     np.array([0.5, 0.0, 0.3, 0]),
-    np.array([0.5, 0.0, 1.3, 0]),
-    np.array([0.0, 0.0, 0.3, 0]),
+    np.array([0.5, 0.0, 1.1, 0]),
+    np.array([0.0, 0.2, 0.3, 0]),
 ]
 waypoints2 = [
     np.array([0.0, -0.5, 0.3, 0]),
-    np.array([0.5, -0.5, 0.6, 0]),
-    np.array([-0.5, 0.5, 0.3, 0]),
+    np.array([0.5, -0.5, 0.9, 0]),
+    np.array([0.1, -0.2, 0.3, 0]),
 ]
 
 
@@ -90,7 +86,7 @@ def run_sequence(drone, waypoints):
             drone.hover(1)
 
         print('Go home before landing...')
-        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0])
+        drone.goTo([drone.pose_home[0], drone.pose_home[1], 0.3, 0], )
         drone.hover(2)
 
         drone.land()
