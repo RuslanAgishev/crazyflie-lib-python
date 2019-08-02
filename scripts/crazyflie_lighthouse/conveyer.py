@@ -24,12 +24,12 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA  02110-1301, USA.
 """
-Simple example that connects to one crazyflie (check the address at the top
-and update it to your crazyflie address) and send a sequence of setpoints,
-one every 5 seconds.
+Simple example that connects to crazyflies one by one (check the addresses at the top
+and update it to your crazyflies addresses) and sends a mission: sequence of setpoints
+or figure8 trajectory.
 
-This example is intended to work with the Loco Positioning System in TWR TOA
-mode. It aims at documenting how to set the Crazyflie in position control mode
+This example is intended to work with the Loco- or Lighthouse Positioning System.
+It aims at documenting how to set the Crazyflie in position control mode
 and how to send setpoints.
 """
 import time
@@ -40,8 +40,7 @@ import cflib.crtp
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 
-from tools import reset_estimator
-from drone import Drone
+from drone import Drone, reset_estimator
 
 
 # URI to the Crazyflie to connect to
@@ -72,12 +71,16 @@ if __name__ == '__main__':
         drone1.hover(1)
 
         """ Flight mission """
+        # Specify here waypoint to follow in the format:
+        # wp = [wp_x, wp_y, wp_z, wp_yaw], where coordinates are given in global
+        # coordinate frame, relative to the origin, [0,0,0,0].
+        #                X     Y     Z    YAW
         wp_sequence = [
-                       [0.8, -0.6, 1.3, 90],
-                       [-0.8, 0.4, 1.3, 180],
-                       [-0.8, 0.0, 1.3, 0],
-                       [0.5, 0.2, 1.3, 0],
-                       [0.0, -0.4, 1.3, 0],
+                       [ 0.8, -0.6,  1.3, 90],
+                       [-0.8,  0.4,  1.3, 180],
+                       [-0.8,  0.0,  1.3, 0],
+                       [ 0.5,  0.2,  1.3, 0],
+                       [ 0.0, -0.4,  1.3, 0],
                       ]
 
         for waypoint in wp_sequence:
@@ -106,10 +109,11 @@ if __name__ == '__main__':
         drone2.takeoff(height=0.3)
         drone2.hover(1)
 
+        # Going to the position convenient to execute a trajectory
         drone2.goTo([0.0, -0.3, 1.3, 0])
         drone2.hover(2)
 
-        drone2.trajectory()
+        drone2.trajectory_figure8()
 
         print('Go home before landing...')
         drone2.goTo([drone2.pose_home[0], drone2.pose_home[1], 0.3, 0])
@@ -132,10 +136,11 @@ if __name__ == '__main__':
         drone3.takeoff(height=0.3)
         drone3.hover(1)
 
+        # Going to the position convenient to execute a trajectory
         drone3.goTo([0.0, -0.3, 1.3, 0])
         drone3.hover(2)
 
-        drone3.trajectory()
+        drone3.trajectory_figure8()
 
         print('Go home before landing...')
         drone3.goTo([drone3.pose_home[0], drone3.pose_home[1], 0.3, 0])
