@@ -47,7 +47,6 @@ def position_callback(timestamp, data, logconf):
     y = data['kalman.stateY']
     z = data['kalman.stateZ']
     pose = np.array([x, y, z])
-    print(pose)
 def start_position_reading(scf):
     log_conf = LogConfig(name='Position', period_in_ms=50) # read position with 20 Hz rate
     log_conf.add_variable('kalman.stateX', 'float')
@@ -133,34 +132,22 @@ def run_shared_sequence(scf, waypoints):
         commander.go_to(goal[0], goal[1], goal[2], goal[3]/180*3.14, flight_time, relative=False)
         time.sleep(flight_time)
 
-    # commander.go_to(0, 0, 0.2, 0.0, flight_time, relative=False)
-    # time.sleep(flight_time)
-
-    commander.land(0.0, 5.0)
-    time.sleep(2)
+    commander.land(0.0, 1.0)
+    time.sleep(1)
     commander.stop()
 
 
-URI1 = 'radio://0/80/2M/E7E7E7E701'
-URI2 = 'radio://0/80/2M/E7E7E7E702'
-URI3 = 'radio://0/80/2M/E7E7E7E703'
-
-uris = {
-    # URI1,
-    URI2,
-    # URI3,
-}
-
+r = 0.5
 # x[m], y[m], z[m], yaw[deg]
 waypoints1 = [
-            (0.0, 0.7, 1.2, 0),
-            (0.7, 0.0, 1.3, -90),
-            (0.0, -0.7, 1.5, -180),
-            (-0.7, 0.0, 1.4, -270),
-            (0.0, 0.7, 1.2, 0),
-            (0.7, 0.0, 1.3, -90),
-            (0.0, -0.7, 1.5, -180),
-            (-0.7, 0.0, 1.4, -270),
+            (0.0, r, 1.2, 0),
+            (r, 0.0, 1.3, -90),
+            (0.0, -r, 1.5, -180),
+            (-r, 0.0, 1.2, -270),
+            (0.0, r, 1.2, -360),
+            (r, 0.0, 1.3, -270),
+            (0.0, -r, 1.5, -180),
+            (-r, 0.0, 1.2, -90),
 
             (0.0, 0.3, 0.3, 0),
             ]
@@ -175,26 +162,36 @@ waypoints2 = [
             (0.0, 0.0, 1.6, -180 ),
             (0.0, 0.0, 1.6, -90),
 
-            (0.0, 0.0, 0.0, 0),
+            (0.0, 0.0, 0.3, 0),
             ]
 # x[m], y[m], z[m], yaw[deg]
 waypoints3 = [
-            (0.0, -0.7, 1.2, 0),
-            (-0.7, 0.0, 1.4, -90),
-            (0.0, 0.7, 1.5, -180),
-            (0.7, 0.0, 1.2, -270),
-            (0.0, -0.7, 1.2, 0),
-            (-0.7, 0.0, 1.4, -90),
-            (0.0, 0.7, 1.5, -180),
-            (0.7, 0.0, 1.2, -270),
+            (0.0, -r, 1.2, 0),
+            (-r, 0.0, 1.3, -90),
+            (0.0, r, 1.5, -180),
+            (r, 0.0, 1.2, -270),
+            (0.0, -r, 1.2, -360),
+            (-r, 0.0, 1.3, -270),
+            (0.0, r, 1.5, -180),
+            (r, 0.0, 1.2, -90),
 
-            (0.0, -0.5, 0.3, 0),
+            (0.0, -r, 0.3, 0),
             ]
 
+URI1 = 'radio://0/80/2M/E7E7E7E701'
+URI2 = 'radio://0/80/2M/E7E7E7E702'
+URI3 = 'radio://0/80/2M/E7E7E7E703'
+uris = {
+    URI1,
+    URI2,
+    URI3,
+}
+
+
 wp_args = {
-    # URI1: [waypoints1],
+    URI1: [waypoints1],
     URI2: [waypoints2],
-    # URI3: [waypoints3],
+    URI3: [waypoints3],
 }
 
 if __name__ == '__main__':
