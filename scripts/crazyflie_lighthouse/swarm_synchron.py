@@ -45,7 +45,7 @@ from cflib.crazyflie.syncLogger import SyncLogger
 
 
 V_BATTERY_TO_GO_HOME = 3.4
-V_BATTERY_CHARGED = 3.85
+V_BATTERY_CHARGED = 3.9
 
 class Drone:
     def __init__(self, scf):
@@ -53,7 +53,7 @@ class Drone:
         self.pose = None
         self.pose_home = None
         self.start_position_reading()
-        self.start_battery_status_reading()
+        # self.start_battery_status_reading()
 
     def position_callback(self, timestamp, data, logconf):
         x = data['kalman.stateX']
@@ -165,6 +165,33 @@ def run_shared_sequence(scf, drone):
     time.sleep(1)
     commander.stop()
 
+def run_shared_sequence_battery_check(scf, drone):
+    activate_mellinger_controller(scf, False)
+
+    flight_time = 4
+
+    commander = scf.cf.high_level_commander
+    if drone.battery_state == 'fully_charged':
+        commander.takeoff(0.3, 2.0)
+        time.sleep(3)
+
+        for goal in drone.waypoints:
+            if not drone.battery_state == 'needs_charging':
+                print('Going to', goal)
+                commander.go_to(goal[0], goal[1], goal[2], goal[3]/180*3.14, flight_time, relative=False)
+                time.sleep(flight_time)
+
+        commander.go_to(drone.waypoints[-1][0], 
+                        drone.waypoints[-1][1],
+                        drone.waypoints[-1][2],
+                        0, flight_time, relative=False)
+        time.sleep(flight_time)
+
+        commander.land(0.0, 1.0)
+        time.sleep(1)
+        commander.stop()
+
+
 r = 0.5
 # x[m], y[m], z[m], yaw[deg]
 waypoints1 = [
@@ -205,7 +232,7 @@ waypoints = [
     waypoints3,
 ]
 
-URI1 = 'radio://0/80/2M/E7E7E7E701'
+URI1 = 'radio://0/80/2M/E7E7E7E703'
 URI2 = 'radio://0/80/2M/E7E7E7E702'
 URI3 = 'radio://0/80/2M/E7E7E7E703'
 uris = {
@@ -232,7 +259,7 @@ if __name__ == '__main__':
             drones[i].initial_charge = drones[i].V_bat
             waypoints[i].append( (drones[i].pose_home[0],
                                   drones[i].pose_home[1],
-                                  drones[i].pose_home[2], 0) )
+                                  drones[i].pose_home[2]+0.1, 0) )
             drones[i].waypoints = waypoints[i]
             i+=1
 
@@ -242,4 +269,5 @@ if __name__ == '__main__':
             URI3: [drones[2]],
         }
 
-        swarm.parallel_safe(run_shared_sequence, args_dict=wp_args)
+        # swarm.parallel_safe(run_shared_sequence, args_dict=wp_args)
+        swarm.parallel_safe(run_shared_sequence_battery_check, args_dict=wp_args)
