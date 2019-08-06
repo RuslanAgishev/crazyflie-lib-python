@@ -53,7 +53,7 @@ class Drone:
         self.pose = None
         self.pose_home = None
         self.start_position_reading()
-        # self.start_battery_status_reading()
+        self.start_battery_status_reading()
 
     def position_callback(self, timestamp, data, logconf):
         x = data['kalman.stateX']
@@ -72,10 +72,10 @@ class Drone:
 
     def battery_callback(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
-        # print('Battery status: %.2f [V]' %self.V_bat)
+        print('Battery status: %.2f [V]' %self.V_bat)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
-            # print('Battery is not charged: %.2f' %self.V_bat)
+            print('Battery is not charged: %.2f' %self.V_bat)
         elif self.V_bat >= V_BATTERY_CHARGED:
             self.battery_state = 'fully_charged'
     def start_battery_status_reading(self):
@@ -232,7 +232,7 @@ waypoints = [
     waypoints3,
 ]
 
-URI1 = 'radio://0/80/2M/E7E7E7E703'
+URI1 = 'radio://0/80/2M/E7E7E7E701'
 URI2 = 'radio://0/80/2M/E7E7E7E702'
 URI3 = 'radio://0/80/2M/E7E7E7E703'
 uris = {
@@ -256,7 +256,6 @@ if __name__ == '__main__':
             drones[i] = Drone(scf)
             time.sleep(1.0)
             drones[i].pose_home = drones[i].pose
-            drones[i].initial_charge = drones[i].V_bat
             waypoints[i].append( (drones[i].pose_home[0],
                                   drones[i].pose_home[1],
                                   drones[i].pose_home[2]+0.1, 0) )
@@ -271,3 +270,4 @@ if __name__ == '__main__':
 
         # swarm.parallel_safe(run_shared_sequence, args_dict=wp_args)
         swarm.parallel_safe(run_shared_sequence_battery_check, args_dict=wp_args)
+

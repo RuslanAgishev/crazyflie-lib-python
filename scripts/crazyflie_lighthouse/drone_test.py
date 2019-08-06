@@ -15,7 +15,7 @@ import sys
 if len(sys.argv)>1:
     URI = sys.argv[1]
 else:
-    URI = 'radio://0/80/2M/E7E7E7E703'
+    URI = 'radio://0/80/2M/E7E7E7E701'
 
 # Only output errors from the logging framework
 logging.basicConfig(level=logging.ERROR)

@@ -108,7 +108,8 @@ if __name__ == '__main__':
     drone1 = Drone(URI1)
     drone2 = Drone(URI2)
 
-    threading.Thread(target=run_sequence, args=(drone1, waypoints1,)).start()
-    threading.Thread(target=run_sequence, args=(drone2, waypoints2,)).start()
-
+    thread1 = threading.Thread(target=run_sequence, args=(drone1, waypoints1,))
+    thread2 = threading.Thread(target=run_sequence, args=(drone2, waypoints2,))
+    thread1.start(); thread2.start()
+    thread1.join(); thread2.join()
     
