@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-    <node name="cf_inspection" pkg="cf_inspection" type="multiranger_pointcloud.py" output="screen" />
+    <!-- <node name="cf_inspection" pkg="cf_inspection" type="multiranger_pointcloud.py" output="screen" /> -->
 
     <!-- data visualization -->
     <!-- <node pkg="rqt_plot" type="rqt_plot" name="rqt_plot1" args="/cf_pose/pose/position/x:y:z"/> -->

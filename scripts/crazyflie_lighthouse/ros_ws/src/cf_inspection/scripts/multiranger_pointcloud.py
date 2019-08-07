@@ -39,7 +39,6 @@ import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.log import LogConfig
-from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
 from cflib.utils.multiranger import Multiranger
 
@@ -49,6 +48,7 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, PointField
 
+from PyQt4 import QtGui, QtCore
 
 logging.basicConfig(level=logging.INFO)
 URI = 'radio://0/80/2M/E7E7E7E701'
@@ -77,10 +77,12 @@ def is_close(range):
         return range < MIN_DISTANCE
 
 
-class Drone:
+class Drone(QtGui.QMainWindow):
     def __init__(self, URI):
+        QtGui.QMainWindow.__init__(self)
+
         cflib.crtp.init_drivers(enable_debug_driver=False)
-        self.cf = Crazyflie(ro_cache=None, rw_cache='cache')
+        self.cf = Crazyflie(ro_cache=None, rw_cache='./cache')
         # Connect callbacks from the Crazyflie API
         self.cf.connected.add_callback(self.connected)
         self.cf.disconnected.add_callback(self.disconnected)
@@ -88,6 +90,39 @@ class Drone:
         self.cf.open_link(URI)
         # Tool to process the data from drone's sensors
         self.processing = Processing()
+        
+        self.motion_commander = MotionCommander(self.cf)
+        time.sleep(3)
+        self.motion_commander.take_off(0.3, 0.2)
+        time.sleep(1)
+        self.motion_commander.start_forward(0.15)
+        time.sleep(1)
+
+        self.hoverTimer = QtCore.QTimer()
+        self.hoverTimer.timeout.connect(self.sendHoverCommand)
+        self.hoverTimer.setInterval(0.25)
+        self.hoverTimer.start()
+
+    def sendHoverCommand(self):
+        if is_close(self.measurement['front']) and self.measurement['left'] > self.measurement['right']:
+            self.motion_commander.stop()
+            self.motion_commander.turn_left(60, 70)
+            self.motion_commander.start_forward(0.15)
+        if is_close(self.measurement['front']) and self.measurement['left'] < self.measurement['right']:
+            self.motion_commander.stop()
+            self.motion_commander.turn_right(60, 70)
+            self.motion_commander.start_forward(0.15)
+        if is_close(self.measurement['left']):
+            self.motion_commander.right(0.1, 0.2)
+            self.motion_commnder.stop()
+            self.motion_commander.turn_right(45, 70)
+            self.motion_commander.start_forward(0.15)
+        if is_close(self.measurement['right']):
+            self.motion_commander.left(0.1, 0.2)
+            self.motion_commander.stop()
+            self.motion_commander.turn_left(45, 70)
+            self.motion_commander.start_forward(0.15)
+
 
     def disconnected(self, URI):
         print('Disconnected')
@@ -287,13 +322,6 @@ class Processing:
     def set_measurement(self, measurements=None):
         data = self.rotate_and_create_points(measurements)
         o = self.last_pos
-        # for i in range(6):
-        #     if i < len(data):
-        #         o = self.last_pos
-        #         # self.lines[i].set_data(np.array([o, data[i]]))
-        #     # else:
-        #         # self.lines[i].set_data(np.array([o, o]))
-
         if len(data) > 0:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
@@ -301,8 +329,7 @@ class Processing:
 
     def xyz_array_to_pointcloud2(self, points):
         '''
-        Create a sensor_msgs.PointCloud2 from an array
-        of points.
+        Create a sensor_msgs.PointCloud2 from an array of points.
         '''
         msg = PointCloud2()
         msg.header.stamp = rospy.Time.now()
@@ -331,4 +358,6 @@ class Processing:
 
 if __name__ == '__main__':
     rospy.init_node('drone_multiranger')
+    appQt = QtGui.QApplication(sys.argv)
     drone = Drone(URI)
+    appQt.exec_()
