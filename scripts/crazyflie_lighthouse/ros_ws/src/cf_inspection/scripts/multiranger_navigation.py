@@ -32,6 +32,7 @@ import sys
 import csv
 
 import numpy as np
+from numpy.linalg import norm
 import time
 from threading import Thread
 from multiprocessing import Process
@@ -61,22 +62,26 @@ PLOT_CF = True
 # Set the sensor threashold (in mm)
 SENSOR_TH = 1500
 # Set the speed factor for moving and rotating
-SPEED_FACTOR = 0.1
+SPEED_FACTOR = 0.15
 
-V_BATTERY_TO_GO_HOME = 3.4 # [V]
+V_BATTERY_TO_GO_HOME = 3.5 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
-WRITE_TO_FILE = 0
-
+WRITE_TO_FILE = 0 # TODO: change write_to_file() function:
+                  # it introduces to much delay to write the whole pointcloud at ones
+GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
 
 def is_close(range):
-    MIN_DISTANCE = 350  # mm
-
+    MIN_DISTANCE = 350 # mm
     if range is None:
         return False
     else:
         return range < MIN_DISTANCE
 
+def normalize(vector):
+    vector = np.array(vector)
+    v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
+    return v_norm
 
 class Drone(QtGui.QMainWindow):
     def __init__(self, URI):
@@ -91,41 +96,53 @@ class Drone(QtGui.QMainWindow):
         self.cf.open_link(URI)
         # Tool to process the data from drone's sensors
         self.processing = Processing()
-        
+
+        time.sleep(3)
+        self.pose_home = self.position; self.pose_home[2] = 0.1
+
+        self.velocity = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'yaw': 0.0}
+
+        self.goal = np.array([0.5, 0.0, 0.3])
+
         self.motion_commander = MotionCommander(self.cf)
         time.sleep(3)
-        self.motion_commander.take_off(0.2, 0.2)
-        time.sleep(1)
-        self.motion_commander.start_forward(0.15)
+        self.motion_commander.take_off(0.3, 0.2)
         time.sleep(1)
 
-        self.hoverTimer = QtCore.QTimer()
-        self.hoverTimer.timeout.connect(self.sendHoverCommand)
-        self.hoverTimer.setInterval(0.25)
-        self.hoverTimer.start()
+        self.velocityTimer = QtCore.QTimer()
+        self.velocityTimer.timeout.connect(self.sendVelocityCommand)
+        self.velocityTimer.setInterval(100) # [ms]
+        self.velocityTimer.start()
 
-    def sendHoverCommand(self):
-        """
-        Change UAV flight direction based on obstacles detected with multiranger.
-        """
-        if is_close(self.measurement['front']) and self.measurement['left'] > self.measurement['right']:
-            self.motion_commander.stop()
-            self.motion_commander.turn_left(60, 70)
-            self.motion_commander.start_forward(0.15)
-        if is_close(self.measurement['front']) and self.measurement['left'] < self.measurement['right']:
-            self.motion_commander.stop()
-            self.motion_commander.turn_right(60, 70)
-            self.motion_commander.start_forward(0.15)
+    def sendVelocityCommand(self):
+        direction = normalize(self.goal - self.position)
+        v_x = SPEED_FACTOR * direction[0]
+        v_y = SPEED_FACTOR * direction[1]
+        v_z = SPEED_FACTOR * direction[2]
+
+        # Local movement correction from obstacles
+        dV = 0.1 # [m/s]
         if is_close(self.measurement['left']):
-            self.motion_commander.right(0.1, 0.2)
-            self.motion_commander.stop()
-            self.motion_commander.turn_right(45, 70)
-            self.motion_commander.start_forward(0.15)
+            # print('Obstacle on the LEFT')
+            v_y -= dV
         if is_close(self.measurement['right']):
-            self.motion_commander.left(0.1, 0.2)
-            self.motion_commander.stop()
-            self.motion_commander.turn_left(45, 70)
-            self.motion_commander.start_forward(0.15)
+            # print('Obstacle on the RIGHT')
+            v_y += dV
+
+        self.velocity['x'] = v_x
+        self.velocity['y'] = v_y
+        self.velocity['z'] = v_z
+        # print('Sending velocity:', self.velocity)
+
+        goal_dist = norm(self.goal - self.position)
+        # print('Distance to goal %.2f [m]:' %goal_dist)
+        if goal_dist < GOAL_TOLERANCE: # goal is reached
+            # print('Goal is reached. Going home...')
+            self.goal = self.pose_home
+
+        self.cf.commander.send_velocity_world_setpoint(
+            self.velocity['x'], self.velocity['y'], self.velocity['z'],
+            self.velocity['yaw'])
 
 
     def disconnected(self, URI):
@@ -200,8 +217,8 @@ class Drone(QtGui.QMainWindow):
             data['stabilizer.pitch'],
             data['stabilizer.yaw']
         ]
-        self.position = position
-        self.orientation = orientation
+        self.position = np.array(position)
+        self.orientation = np.array(orientation)
         self.processing.set_position(position, orientation)
 
     def meas_data(self, timestamp, data, logconf):
@@ -226,6 +243,7 @@ class Drone(QtGui.QMainWindow):
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
             # print('Battery is not charged: %.2f' %self.V_bat)
+            self.goal = self.pose_home
         elif self.V_bat >= V_BATTERY_CHARGED:
             self.battery_state = 'fully_charged'
 
@@ -272,7 +290,7 @@ class Processing:
         if PLOT_CF:
             # publish to ROS topic for visualization:
             self.publish_pose(pose, orient, 'cf_pose')
-            self.publish_path(self.path, pose, orient, 'cf_path', limit=200)
+            self.publish_path(self.path, pose, orient, 'cf_path', limit=800)
 
     def rot(self, roll, pitch, yaw, origin, point):
         cosr = math.cos(math.radians(roll))
@@ -334,7 +352,7 @@ class Processing:
         if len(data) > 0:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
-        self.publish_pointcloud(self.meas_data, 'multiranger_pointcloud', limit=2000)
+        self.publish_pointcloud(self.meas_data, 'multiranger_pointcloud', limit=1200)
         if WRITE_TO_FILE: self.write_to_file()
 
     def xyz_array_to_pointcloud2(self, points, limit):
