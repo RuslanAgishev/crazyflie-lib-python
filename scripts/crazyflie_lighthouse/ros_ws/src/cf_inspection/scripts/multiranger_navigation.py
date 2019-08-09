@@ -50,7 +50,6 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, PointField
 
-from PyQt4 import QtGui, QtCore
 
 logging.basicConfig(level=logging.INFO)
 URI = 'radio://0/80/2M/E7E7E7E701'
@@ -67,8 +66,8 @@ SPEED_FACTOR = 0.15
 V_BATTERY_TO_GO_HOME = 3.5 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
-WRITE_TO_FILE = 0 # TODO: change write_to_file() function:
-                  # it introduces to much delay to write the whole pointcloud at ones
+WRITE_TO_FILE = 1 # writing a pointcloud data to a csv file
+
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
 
 def is_close(range):
@@ -83,9 +82,8 @@ def normalize(vector):
     v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
     return v_norm
 
-class Drone(QtGui.QMainWindow):
+class Drone:
     def __init__(self, URI):
-        QtGui.QMainWindow.__init__(self)
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
         self.cf = Crazyflie(ro_cache=None, rw_cache='./cache')
@@ -104,15 +102,34 @@ class Drone(QtGui.QMainWindow):
 
         self.goal = np.array([0.5, 0.0, 0.3])
 
-        self.motion_commander = MotionCommander(self.cf)
-        time.sleep(3)
-        self.motion_commander.take_off(0.3, 0.2)
-        time.sleep(1)
+        # self.mc = MotionCommander(self.cf)
+        # time.sleep(3)
+        # self.mc.take_off(0.2, 0.2)
+        # time.sleep(1)
 
-        self.velocityTimer = QtCore.QTimer()
-        self.velocityTimer.timeout.connect(self.sendVelocityCommand)
-        self.velocityTimer.setInterval(100) # [ms]
-        self.velocityTimer.start()
+        # self.square_mission()
+
+        ''' Mission to a goal and return to home position '''
+        # rate = rospy.Rate(10)
+        # while not rospy.is_shutdown():
+        #     self.sendVelocityCommand()
+        #     rate.sleep()
+
+    def square_mission(self, numiters=1):
+        '''
+        Square trajectory to collect data with multiranger.
+        '''
+        # sequence of repeated squares
+        for _ in range(numiters):
+            # sqaure
+            for _ in range(4):
+                self.mc.forward(1.0)
+                time.sleep(2)
+                self.mc.turn_right(90)
+                time.sleep(1)
+
+        self.mc.land(0.2)
+        time.sleep(1)
 
     def sendVelocityCommand(self):
         direction = normalize(self.goal - self.position)
@@ -254,6 +271,7 @@ class Processing:
         self.path = Path()
         self.meas_data = np.array([0, 0, 0], ndmin=2)
         self.lines = []
+        self.csv_filename = 'coordsXYZ'+str(time.time())+'.csv'
 
     def msg_def_PoseStamped(self, pose, orient):
         worldFrame = "base_link"
@@ -353,7 +371,7 @@ class Processing:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
         self.publish_pointcloud(self.meas_data, 'multiranger_pointcloud', limit=1200)
-        if WRITE_TO_FILE: self.write_to_file()
+        if WRITE_TO_FILE: self.write_to_file(data)
 
     def xyz_array_to_pointcloud2(self, points, limit):
         '''
@@ -384,14 +402,13 @@ class Processing:
         pub = rospy.Publisher(topic_name, PointCloud2, queue_size=1)
         pub.publish(msg)
 
-    def write_to_file(self):
-        with open('coordinates.csv', mode='w') as file:
+    def write_to_file(self, data):
+        with open(self.csv_filename, mode='a') as file:
             writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(self.meas_data)
+            for coord in data:
+                writer.writerow(coord)
 
 
 if __name__ == '__main__':
     rospy.init_node('drone_multiranger')
-    appQt = QtGui.QApplication(sys.argv)
     drone = Drone(URI)
-    appQt.exec_()
