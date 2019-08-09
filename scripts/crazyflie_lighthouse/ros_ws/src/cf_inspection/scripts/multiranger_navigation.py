@@ -80,7 +80,7 @@ def normalize(vector):
     v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
     return v_norm
 
-class Drone:
+class Mission:
     def __init__(self, URI):
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
@@ -105,13 +105,13 @@ class Drone:
         self.mc.take_off(0.2, 0.2)
         time.sleep(1)
 
-        # self.square_mission()
+        self.square_mission()
 
         ''' Mission to a goal and return to home position '''
-        rate = rospy.Rate(10)
-        while not rospy.is_shutdown():
-            self.sendVelocityCommand()
-            rate.sleep()
+        # rate = rospy.Rate(10)
+        # while not rospy.is_shutdown():
+        #     self.sendVelocityCommand()
+        #     rate.sleep()
 
     def square_mission(self, numiters=1):
         '''
@@ -408,5 +408,5 @@ class Processing:
 
 
 if __name__ == '__main__':
-    rospy.init_node('drone_multiranger')
-    drone = Drone(URI)
+    rospy.init_node('mission_multiranger')
+    mission = Mission(URI)

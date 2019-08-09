@@ -47,13 +47,14 @@ from drone import Drone
 
 import rospy
 
+from multiranger_navigation import Mission
+
 # URI to the Crazyflie to connect to
-uri1 = 'radio://0/80/2M/E7E7E7E701'
+uri1 = 'radio://0/80/2M/E7E7E7E703'
 uri2 = 'radio://0/80/2M/E7E7E7E701'
-# uri2 = 'radio://0/80/2M/E7E7E7E702'
 
 if __name__ == '__main__':
-    rospy.init_node('cf_control')
+    rospy.init_node('conveyer')
     cflib.crtp.init_drivers(enable_debug_driver=False)
     drone1 = Drone(uri1)
     drone2 = Drone(uri2)
@@ -77,10 +78,9 @@ if __name__ == '__main__':
 
         """ Flight mission """
         # wp_sequence = [
-        #                [0.3, 0.0, 0.3, 90],
-        #                [0.3, -0.3, 0.3, 0],
+        #                 [0.5, 0.0, 0.4, 90],
+        #                 [0.5, 0.5, 0.6, 180]
         #               ]
-
         wp_sequence = [
                        [0.8, -0.6, 1.3, 90],
                        [-0.8, 0.4, 1.3, 180],
@@ -97,36 +97,10 @@ if __name__ == '__main__':
         print('Go home before landing...')
         drone1.goTo([drone1.pose_home[0], drone1.pose_home[1], 0.3, 0])
         drone1.hover(2)
+
         drone1.land()
         print('Battery status: %.2f [V]' %drone1.V_bat)
 
 
     """ Second mission """
-    with SyncCrazyflie(drone2.uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        drone2.scf = scf
-        reset_estimator(drone2)
-        drone2.start_position_reading()
-        drone2.start_battery_status_reading() # 2 Hz
-        time.sleep(1)
-
-        drone2.pose_home = drone2.pose
-        print('Home position:', drone2.pose_home)
-        print('Battery status %.2f:' %drone2.V_bat)
-
-        # if drone2.battery_state == 'fully_charged':
-            # drone2.takeoff(height=0.3)
-            # drone2.hover(1)
-        x_home = 0.0; y_home = -0.3 # fake gome position of another drone
-        drone2.goTo([x_home, y_home, 0.3, 0.0])
-        drone2.hover(2)
-
-        drone2.goTo([0.0, -0.3, 1.3, 0])
-        drone2.hover(2)
-
-        drone2.trajectory_battery_check()
-
-        print('Go home before landing...')
-        drone2.goTo([x_home, y_home, 0.3, 0])
-        drone2.hover(2)
-        drone2.land()
-        print('Battery status: %.2f [V]' %drone2.V_bat)
+    second_mission = Mission(uri2) # mission for the drone with multiranger deck
