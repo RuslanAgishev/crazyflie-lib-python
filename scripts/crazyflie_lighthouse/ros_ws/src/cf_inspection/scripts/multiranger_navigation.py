@@ -34,8 +34,6 @@ import csv
 import numpy as np
 from numpy.linalg import norm
 import time
-from threading import Thread
-from multiprocessing import Process
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
@@ -102,18 +100,18 @@ class Drone:
 
         self.goal = np.array([0.5, 0.0, 0.3])
 
-        # self.mc = MotionCommander(self.cf)
-        # time.sleep(3)
-        # self.mc.take_off(0.2, 0.2)
-        # time.sleep(1)
+        self.mc = MotionCommander(self.cf)
+        time.sleep(3)
+        self.mc.take_off(0.2, 0.2)
+        time.sleep(1)
 
         # self.square_mission()
 
         ''' Mission to a goal and return to home position '''
-        # rate = rospy.Rate(10)
-        # while not rospy.is_shutdown():
-        #     self.sendVelocityCommand()
-        #     rate.sleep()
+        rate = rospy.Rate(10)
+        while not rospy.is_shutdown():
+            self.sendVelocityCommand()
+            rate.sleep()
 
     def square_mission(self, numiters=1):
         '''
@@ -282,7 +280,7 @@ class Processing:
         msg.pose.position.x = pose[0]
         msg.pose.position.y = pose[1]
         msg.pose.position.z = pose[2]
-        orient = np.array(orient) / 180*3.14
+        orient = np.array(orient) / 180*math.pi
         quaternion = quaternion_from_euler(orient[0], orient[1], orient[2]) #1.57
         msg.pose.orientation.x = quaternion[0]
         msg.pose.orientation.y = quaternion[1]
