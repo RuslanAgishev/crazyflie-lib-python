@@ -22,15 +22,15 @@ from cflib.crazyflie import Crazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
 import rospy
-from multiranger import DroneMultiranger
+from multiranger_scf import DroneMultiranger
 
 
 # URI to the Crazyflie to connect to
-URI1 = 'radio://0/80/2M/E7E7E7E703'
+URI1 = 'radio://0/80/2M/E7E7E7E702'
 
 
 if __name__ == '__main__':
     rospy.init_node('test_multiranger')
-    cflib.crtp.init_drivers(enable_debug_driver=False)
 
     drone = DroneMultiranger(URI1)
+    time.sleep(3)

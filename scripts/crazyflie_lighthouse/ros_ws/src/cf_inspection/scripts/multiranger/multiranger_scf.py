@@ -35,7 +35,7 @@ SPEED_FACTOR = 0.15
 V_BATTERY_TO_GO_HOME = 3.5 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
-WRITE_TO_FILE = 1 # writing a pointcloud data to a csv file
+WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
 
 
@@ -282,21 +282,21 @@ class Processing():
         pitch = -m['pitch']
         yaw = m['yaw']
 
-        if (m['left'] < SENSOR_TH):
-            left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, left))
+        # if (m['left'] < SENSOR_TH):
+        #     left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
+        #     data.append(self.rot(roll, pitch, yaw, o, left))
 
         if (m['right'] < SENSOR_TH):
             right = [o[0], o[1] - m['right'] / 1000.0, o[2]]
             data.append(self.rot(roll, pitch, yaw, o, right))
 
-        if (m['front'] < SENSOR_TH):
-            front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, front))
+        # if (m['front'] < SENSOR_TH):
+        #     front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
+        #     data.append(self.rot(roll, pitch, yaw, o, front))
 
-        if (m['back'] < SENSOR_TH):
-            back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, back))
+        # if (m['back'] < SENSOR_TH):
+        #     back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
+        #     data.append(self.rot(roll, pitch, yaw, o, back))
 
         return data
 

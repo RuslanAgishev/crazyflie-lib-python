@@ -22,9 +22,39 @@ from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
 
 import rospy
+from tf.transformations import quaternion_from_euler
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 from multiranger_scf import DroneMultiranger
 from threading import Thread
 
+def msg_def_PoseStamped(pose, orient):
+    worldFrame = "base_link"
+    msg = PoseStamped()
+    msg.header.seq = 0
+    msg.header.stamp = rospy.Time.now()
+    msg.header.frame_id = worldFrame
+    msg.pose.position.x = pose[0]
+    msg.pose.position.y = pose[1]
+    msg.pose.position.z = pose[2]
+    msg.pose.orientation.x = orient[0]
+    msg.pose.orientation.y = orient[1]
+    msg.pose.orientation.z = orient[2]
+    msg.pose.orientation.w = orient[3]
+    msg.header.seq += 1
+    return msg
+def publish_path(path, pose, orient=[0,0,0,1], topic_name='test_path', limit=-1):
+    msg = msg_def_PoseStamped(pose, orient)
+    path.header = msg.header
+    path.poses.append(msg)
+    if limit>0:
+        path.poses = path.poses[-limit:]
+    pub = rospy.Publisher(topic_name, Path, queue_size=1)
+    pub.publish(path)
+def publish_pose(pose, orient=[0,0,0,1], topic_name='test_path'):
+    msg = msg_def_PoseStamped(pose, orient)
+    pub = rospy.Publisher(topic_name, PoseStamped, queue_size=1)
+    pub.publish(msg)
 
 def wait_for_position_estimator(scf):
     print('Waiting for estimator to find position...')
@@ -104,46 +134,63 @@ def prepare(scf):
     activate_mellinger_controller(scf, False)
 
 
-def square_flight(drone, numiters=8):
-    commander = drone.scf.cf.high_level_commander
+def circle_trajectory(drone, initial_angle=0):
+    '''
+    The group of 3 drones is initialy placed as follows:
+                  1^         3^
+ 
+                        0
 
-    commander.takeoff(0.15, 2.0)
-    time.sleep(3)
-
-    flight_time = 3
-    dz = 0.0
-    for _ in range(numiters):
-        # one flight mission
-        for goal in drone.waypoints:
-            goal = np.array(goal)
-            goal[2]+=dz; goal[3] *= (3.14/180)
-            print('Going to', goal)
-            commander.go_to(goal[0], goal[1], goal[2], goal[3], flight_time, relative=False)
-            time.sleep(flight_time)
-        dz += 0.05
-
-    # commander.go_to(drone.pose_home[0], drone.pose_home[1], 0.1, 0, flight_time, relative=False)
-    # time.sleep(flight_time)
-
-    commander.land(0.0, 3)
-    time.sleep(1)
-    commander.stop()
-
-def circle_trajectory(drone, angle_shift=0):
+                        2^
+    where 0 denotes origin, and numbers 1,2,3 labels of the
+    crazyflies, ^ shows orientation along X-axis.
+    The swarm takes off at initial height, h0=0.2 [m], and then
+    the drones performe simultaneously circular trajectory at a constant height.
+    After the full circle is executed, the heigt is increased with value dh=0.4 [m].
+    Then the swarm again performce a revolution at the new constant height.
+    Ones the maximum height, 1.6 [m] is reached, the drones start descending
+    in the same manner.
+    One circular revolution consumes 8 [sec] of time.
+    Total time of trajectory execution is 8x3 + 8 + 8x3 = 8x7 = 56 [sec].
+    '''
     commander = drone.cf.commander
+    hl_commander = drone.cf.high_level_commander
+    label = drone.processing.id
+    drone.path = Path()
 
-    angular_range = np.linspace(0+angle_shift, 2*np.pi+angle_shift, 80)
-    R = 0.7; h = 0.2; dh = 0.4
-    numiters = 4
+    angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, 80)
+    R = 0.7; h = 0.2; dh = 0.15
+    numiters = 8 #3
     t0 = time.time()
+
+    hl_commander.takeoff(h, 1.0)
+    time.sleep(1)
+
+    # Going to initial locations
+    flight_time = 3.0
+    hl_commander.go_to(R*np.cos(initial_angle),
+                       R*np.sin(initial_angle),
+                       h,
+                       initial_angle - np.pi/2,
+                       flight_time, relative=False)
+    time.sleep(flight_time)
+
+    # hl_commander.land(0.0, 2.0)
+    # time.sleep(2)
+    hl_commander.stop()
+
+    # Trajectory
     for _ in range(numiters):
         print('Height: %.2f [m]' %h)
         # circular trajectory
         for t in angular_range:
-            sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            yaw = (t - np.pi/2) % (2*np.pi)
+            sp = [R*np.cos(t), R*np.sin(t), h, 180*yaw/np.pi]
+            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            q = quaternion_from_euler(0,0,yaw)
+            publish_pose(sp[:3], orient=q, topic_name='pose'+label)
+            publish_path(drone.path, sp[:3], topic_name='path'+label)
             time.sleep(0.1)
-            print('Time passed: %2.f [sec]' %(time.time()-t0))
         h += dh
 
     for _ in range(numiters):
@@ -151,38 +198,87 @@ def circle_trajectory(drone, angle_shift=0):
         print('Height: %.2f [m]' %h)
         # circular trajectory
         for t in angular_range:
-            sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            yaw = (t - np.pi/2) % (2*np.pi)
+            sp = [R*np.cos(t), R*np.sin(t), h, 180*yaw/np.pi]
+            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            q = quaternion_from_euler(0,0,yaw)
+            publish_pose(sp[:3], orient=q, topic_name='pose'+label)
+            publish_path(drone.path, sp[:3], topic_name='path'+label)
             time.sleep(0.1)
-            print('Time passed: %2.f [sec]' %(time.time()-t0))
+    print('Time passed: %2.f [sec]' %(time.time()-t0))
 
 
-# Waypoints for square trajectories:
-length = 1.6
-square_waypoints = [
-        [-length/2, length/2, 0.15, 0],
-        [length/2,  length/2, 0.15, 0],
-        [ length/2, -length/2, 0.15, 0],
-        [-length/2, -length/2, 0.15, 0],
-]
-phi = np.pi/4
-cos = np.cos(phi)
-sin = np.sin(phi)
-R = np.array([[cos, -sin, 0, 0],
-              [sin,  cos, 0, 0],
-              [0,    0,   1, 0],
-              [0,    0,   0, 1]])
-romb_waypoints = []
-for wp in square_waypoints:
-    wp_rot = np.dot(R, wp)
-    romb_waypoints.append(wp_rot)
-romb_waypoints = shift(romb_waypoints, 1, fill_value=romb_waypoints[-1])
 
+def spiral_trajectory(drone, initial_angle=0):
+    '''
+    The group of 3 drones is initialy placed as follows:
+                  1^         3^
+ 
+                        0
+
+                        2^
+    where 0 denotes origin, and numbers 1,2,3 labels of the
+    crazyflies, ^ shows orientation along X-axis.
+    The swarm ascends via spiral to the maximum height=1.6 [m].
+    The drones start flying one by one with a delay between neighbouring
+    UAVs equal to 5.33 [sec]. Ones the maximum height is reached,
+    each quadrotor performes a circular flight at a constant height
+    and then starts to descend along spiral trajectory.
+    One circular revolution consumes 8 [sec] of time.
+    Total time of trajectory execution is 8x3 + 8 + 8x3 = 8x7 = 56 [sec].
+    '''
+    label = drone.processing.id
+    if label=='02':
+        time.sleep(5.33)
+    elif label=='03':
+        time.sleep(10.66)
+
+    drone.path = Path()
+    print('Ready to fly', drone.processing.id)
+    commander = drone.cf.commander
+    angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, 80)
+    R = 0.7; h = 0.0; dh = 0.005
+    numiters = 3
+
+    # Ascedning via spiral
+    for _ in range(numiters):
+        # one circle in spiral trajectory
+        for t in angular_range:
+            sp = [R*np.cos(t), R*np.sin(t), h, 0]
+            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            publish_path(drone.path, sp[:3], topic_name='path'+label)
+            publish_pose(sp[:3], topic_name='pose'+label)
+            h += dh
+            time.sleep(0.1)
+
+    # 1 circle on maximum height
+    for t in angular_range:
+        sp = [R*np.cos(t), R*np.sin(t), h, 0]
+        if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+        publish_path(drone.path, sp[:3], topic_name='path'+label)
+        publish_pose(sp[:3], topic_name='pose'+label)
+        time.sleep(0.1)
+    
+    # Decending via spiral
+    for _ in range(numiters):
+        # one circle in spiral trajectory
+        for t in angular_range:
+            sp = [R*np.cos(t), R*np.sin(t), h, 0]
+            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            publish_path(drone.path, sp[:3], topic_name='path'+label)
+            publish_pose(sp[:3], topic_name='pose'+label)
+            h -= dh
+            time.sleep(0.1)
+
+
+TO_FLY = 1
 
 
 # URI to the Crazyflie to connect to
-URI1 = 'radio://0/80/2M/E7E7E7E703'
+URI1 = 'radio://0/80/2M/E7E7E7E701'
 URI2 = 'radio://0/80/2M/E7E7E7E702'
+URI3 = 'radio://0/80/2M/E7E7E7E703'
+
 
 
 if __name__ == '__main__':
@@ -190,28 +286,30 @@ if __name__ == '__main__':
 
     drone1 = DroneMultiranger(URI1)
     drone2 = DroneMultiranger(URI2)
-    time.sleep(3)
+    drone3 = DroneMultiranger(URI3)
+    time.sleep(4)
     
     drone1.pose_home = drone1.position
     drone2.pose_home = drone2.position
+    drone3.pose_home = drone3.position
 
-    print('Home positions:', drone1.pose_home, drone2.pose_home)
+    # print('Home positions:', drone1.pose_home, drone2.pose_home, drone3.pose_home)
 
-    th1 = Thread(target=prepare, args=(drone1.scf,) )
-    th2 = Thread(target=prepare, args=(drone2.scf,) )
-    th1.start()
-    th2.start()
-    th1.join()
-    th2.join()
+    if TO_FLY:
+        th1 = Thread(target=prepare, args=(drone1.scf,) )
+        th2 = Thread(target=prepare, args=(drone2.scf,) )
+        th3 = Thread(target=prepare, args=(drone3.scf,) )
+        th1.start(); th2.start(); th3.start()
+        th1.join(); th2.join(); th3.join()
 
-    # drone1.waypoints = square_waypoints
-    # drone2.waypoints = romb_waypoints
-    # th1 = Thread(target=square_flight, args=(drone1,) )
-    # th2 = Thread(target=square_flight, args=(drone2,) )
-
-    th1 = Thread(target=circle_trajectory, args=(drone1,) )
+    th1 = Thread(target=circle_trajectory, args=(drone1, np.pi/3) )
     th2 = Thread(target=circle_trajectory, args=(drone2, np.pi,) )
-    th1.start()
-    th2.start()
-    th1.join()
-    th2.join()
+    th3 = Thread(target=circle_trajectory, args=(drone3, 5*np.pi/3,) )
+    th1.start(); th2.start(); th3.start()
+    th1.join(); th2.join(); th3.join()
+
+    # th1 = Thread(target=spiral_trajectory, args=(drone1, np.pi/3) )
+    # th2 = Thread(target=spiral_trajectory, args=(drone2, np.pi,) )
+    # th3 = Thread(target=spiral_trajectory, args=(drone3, 5*np.pi/3,) )
+    # th1.start(); th2.start(); th3.start()
+    # th1.join(); th2.join(); th3.join()
