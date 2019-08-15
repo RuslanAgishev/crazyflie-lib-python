@@ -49,18 +49,19 @@ class Drone:
     def stop(self):
         self.cf.commander.send_stop_setpoint()
 
-    def goTo(self, goal, pos_tol=0.03, yaw_tol=3):
+    def goTo(self, goal, vel=0.3, pos_tol=0.03, yaw_tol=3):
         goal = np.array(goal)
         print('Going to', goal)
         if self.sp is None:
             self.sp = np.zeros(4); self.sp[:3] = self.pose
+        dt = 0.1
         while norm(goal[:3] - self.sp[:3]) > pos_tol or norm(self.sp[3]-goal[3]) > yaw_tol:
             n = normalize(goal[:3] - self.sp[:3])
-            self.sp[:3] += 0.03 * n # position setpoints
+            self.sp[:3] += dt*vel * n # position setpoints
             self.sp[3] += 3 * np.sign( goal[3] - self.sp[3] ) # yaw angle
             # print('Yaw', self.sp[3], 'yaw diff', norm(self.sp[3]-goal[3]))
             self.fly()
-            time.sleep(0.1)
+            time.sleep(dt)
 
     def hover(self, t_hover=2):
         t0 = time.time()

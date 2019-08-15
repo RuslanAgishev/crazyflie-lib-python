@@ -96,6 +96,7 @@ class Drone:
             time.sleep(0.1)
 
     def hover(self, t_hover=2):
+        # print('Holding position...')
         t0 = time.time()
         while time.time() - t0 < t_hover:
             self.fly()

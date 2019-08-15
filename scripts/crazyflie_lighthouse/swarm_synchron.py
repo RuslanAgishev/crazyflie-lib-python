@@ -217,7 +217,7 @@ URI3 = 'radio://0/80/2M/E7E7E7E703'
 uris = {
     URI1,
     URI2,
-    URI3,
+    # URI3,
 }
 
 
@@ -244,7 +244,7 @@ if __name__ == '__main__':
         wp_args = {
             URI1: [drones[0]],
             URI2: [drones[1]],
-            URI3: [drones[2]],
+            # URI3: [drones[2]],
         }
 
         swarm.parallel_safe(run_shared_sequence, args_dict=wp_args)

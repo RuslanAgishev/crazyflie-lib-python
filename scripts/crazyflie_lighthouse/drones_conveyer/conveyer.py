@@ -40,11 +40,11 @@ if __name__ == '__main__':
 
         """ Flight mission """
         wp_sequence = [
-                       [0.4, -0.8, 0.4, 0],
+                       [0.4, -0.6, 0.4, 0],
                        [0.4, 0.3, 1.0, 90],
                        [-0.4, 0.3, 1.2, 180],
-                       [-0.4, -0.8, 1.4, 270],
-                       [0.4, -0.8, 1.6, 360],
+                       [-0.4, -0.6, 1.4, 270],
+                       [0.4, -0.6, 1.2, 360],
                       ]
 
         for waypoint in wp_sequence:
@@ -52,15 +52,15 @@ if __name__ == '__main__':
             drone1.hover(0)
 
         wp_sequence = [
-                       [0.0, 0.0, 1.4, 0],
+                       [0.0, 0.0, 1.2, 0],
                        [0.4, 0.3, 1.3, 0],
-                       [0.4, -0.8, 1.3, 0],
-                       [0.4, -0.8, 0.3, 0],
+                       [0.4, -0.6, 1.3, 0],
+                       [0.4, -0.6, 0.3, 0],
                        [0.4, 0.3, 0.3, 0],
                       ]
 
         for waypoint in wp_sequence:
-            drone1.goTo(waypoint)
+            drone1.goTo(waypoint, vel=0.5)
             drone1.hover(0.5)
 
         print('Go home before landing...')
@@ -96,7 +96,7 @@ if __name__ == '__main__':
                       ]
 
         for waypoint in wp_sequence:
-            drone2.goTo(waypoint)
+            drone2.goTo(waypoint, vel=0.5)
             drone2.hover(1)
 
         print('Go home before landing...')
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         drone3.takeoff(height=0.3)
         drone3.hover(1)
 
-        drone3.goTo([0.0, -0.3, 1.3, 0])
+        drone3.goTo([0.0, -0.3, 1.1, 0], vel=0.5)
         drone3.hover(2)
 
         drone3.trajectory()

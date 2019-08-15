@@ -272,7 +272,7 @@ Visualization Manager:
       Axes Length: 1
       Axes Radius: 0.100000001
       Class: rviz/Pose
-      Color: 255; 255; 255
+      Color: 0; 170; 0
       Enabled: true
       Head Length: 0.200000003
       Head Radius: 0.100000001
@@ -286,7 +286,7 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 255; 255; 255
+      Color: 0; 170; 0
       Enabled: true
       Head Diameter: 0.300000012
       Head Length: 0.200000003
