@@ -115,19 +115,6 @@ def activate_mellinger_controller(scf, use_mellinger):
         controller = 2
     scf.cf.param.set_value('stabilizer.controller', controller)
 
-
-def shift(arr, num, fill_value):
-    result = np.empty_like(arr)
-    if num > 0:
-        result[:num] = fill_value
-        result[num:] = arr[:-num]
-    elif num < 0:
-        result[num:] = fill_value
-        result[:num] = arr[-num:]
-    else:
-        result[:] = arr
-    return result
-
 def prepare(scf):
     activate_high_level_commander(scf)
     reset_estimator(scf)
@@ -208,71 +195,7 @@ def circle_trajectory(drone, initial_angle=0):
     print('Time passed: %2.f [sec]' %(time.time()-t0))
 
 
-
-def spiral_trajectory(drone, initial_angle=0):
-    '''
-    The group of 3 drones is initialy placed as follows:
-                  1^         3^
- 
-                        0
-
-                        2^
-    where 0 denotes origin, and numbers 1,2,3 labels of the
-    crazyflies, ^ shows orientation along X-axis.
-    The swarm ascends via spiral to the maximum height=1.6 [m].
-    The drones start flying one by one with a delay between neighbouring
-    UAVs equal to 5.33 [sec]. Ones the maximum height is reached,
-    each quadrotor performes a circular flight at a constant height
-    and then starts to descend along spiral trajectory.
-    One circular revolution consumes 8 [sec] of time.
-    Total time of trajectory execution is 8x3 + 8 + 8x3 = 8x7 = 56 [sec].
-    '''
-    label = drone.processing.id
-    if label=='02':
-        time.sleep(5.33)
-    elif label=='03':
-        time.sleep(10.66)
-
-    drone.path = Path()
-    print('Ready to fly', drone.processing.id)
-    commander = drone.cf.commander
-    angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, 80)
-    R = 0.7; h = 0.0; dh = 0.005
-    numiters = 3
-
-    # Ascedning via spiral
-    for _ in range(numiters):
-        # one circle in spiral trajectory
-        for t in angular_range:
-            sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-            publish_path(drone.path, sp[:3], topic_name='path'+label)
-            publish_pose(sp[:3], topic_name='pose'+label)
-            h += dh
-            time.sleep(0.1)
-
-    # 1 circle on maximum height
-    for t in angular_range:
-        sp = [R*np.cos(t), R*np.sin(t), h, 0]
-        if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-        publish_path(drone.path, sp[:3], topic_name='path'+label)
-        publish_pose(sp[:3], topic_name='pose'+label)
-        time.sleep(0.1)
-    
-    # Decending via spiral
-    for _ in range(numiters):
-        # one circle in spiral trajectory
-        for t in angular_range:
-            sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-            publish_path(drone.path, sp[:3], topic_name='path'+label)
-            publish_pose(sp[:3], topic_name='pose'+label)
-            h -= dh
-            time.sleep(0.1)
-
-
 TO_FLY = 1
-
 
 # URI to the Crazyflie to connect to
 URI1 = 'radio://0/80/2M/E7E7E7E701'
@@ -308,8 +231,3 @@ if __name__ == '__main__':
     th1.start(); th2.start(); th3.start()
     th1.join(); th2.join(); th3.join()
 
-    # th1 = Thread(target=spiral_trajectory, args=(drone1, np.pi/3) )
-    # th2 = Thread(target=spiral_trajectory, args=(drone2, np.pi,) )
-    # th3 = Thread(target=spiral_trajectory, args=(drone3, 5*np.pi/3,) )
-    # th1.start(); th2.start(); th3.start()
-    # th1.join(); th2.join(); th3.join()
