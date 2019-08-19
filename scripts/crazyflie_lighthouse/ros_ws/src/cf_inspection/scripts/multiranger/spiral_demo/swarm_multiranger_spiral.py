@@ -28,6 +28,19 @@ from nav_msgs.msg import Path
 from multiranger_scf import DroneMultiranger
 from threading import Thread
 
+
+import sys, termios, tty, os, time
+def getch():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+ 
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
 def msg_def_PoseStamped(pose, orient):
     worldFrame = "base_link"
     msg = PoseStamped()
@@ -56,7 +69,6 @@ def publish_pose(pose, orient=[0,0,0,1], topic_name='test_path'):
     pub = rospy.Publisher(topic_name, PoseStamped, queue_size=1)
     pub.publish(msg)
 
-N_READY_DRONES = 0
 def wait_for_position_estimator(scf):
     print('Waiting for estimator to find position...')
 
@@ -117,24 +129,12 @@ def activate_mellinger_controller(scf, use_mellinger):
     scf.cf.param.set_value('stabilizer.controller', controller)
 
 
-def shift(arr, num, fill_value):
-    result = np.empty_like(arr)
-    if num > 0:
-        result[:num] = fill_value
-        result[num:] = arr[:-num]
-    elif num < 0:
-        result[num:] = fill_value
-        result[:num] = arr[-num:]
-    else:
-        result[:] = arr
-    return result
-
 def prepare(drone):
     activate_high_level_commander(drone.scf)
     reset_estimator(drone.scf)
     activate_mellinger_controller(drone.scf, False)
     drone.estimated_pose = 1
-    # print("Drone is estimated its position: ", drone.processing.id)
+    # print("Drone is estimated its position: ", drone.id)
 
 
 def fly(drone):
@@ -207,24 +207,24 @@ def spiral_trajectory(drone, initial_angle=0, t_wait=0):
     Total time of trajectory execution is 8x3 + 8 + 8x3 = 8x7 = 56 [sec].
     '''
     drone.path = Path()
-    label = drone.processing.id
+    label = drone.id
     time.sleep(t_wait)
 
-    print('Ready to fly', drone.processing.id)
+    # print('Ready to fly', drone.id)
     commander = drone.cf.commander
     angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, 80)
     R = 0.7; h = 0.2; dh = 0.005
     numiters = 3
     
     takeoff(drone)
-    goTo(drone, [R*np.cos(initial_angle), R*np.sin(initial_angle), h, 0])
 
     # Ascedning via spiral
     for _ in range(numiters):
         # one circle in spiral trajectory
         for t in angular_range:
             sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            if TO_FLY:
+                commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             publish_path(drone.path, sp[:3], topic_name='path'+label)
             publish_pose(sp[:3], topic_name='pose'+label)
             h += dh
@@ -233,7 +233,8 @@ def spiral_trajectory(drone, initial_angle=0, t_wait=0):
     # 1 circle on maximum height
     for t in angular_range:
         sp = [R*np.cos(t), R*np.sin(t), h, 0]
-        if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+        if TO_FLY:
+            commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
         publish_path(drone.path, sp[:3], topic_name='path'+label)
         publish_pose(sp[:3], topic_name='pose'+label)
         time.sleep(0.1)
@@ -243,14 +244,16 @@ def spiral_trajectory(drone, initial_angle=0, t_wait=0):
         # one circle in spiral trajectory
         for t in angular_range:
             sp = [R*np.cos(t), R*np.sin(t), h, 0]
-            if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+            if TO_FLY:
+                commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             publish_path(drone.path, sp[:3], topic_name='path'+label)
             publish_pose(sp[:3], topic_name='pose'+label)
             h -= dh
             time.sleep(0.1)
 
+    goTo(drone, [drone.pose_home[0], drone.pose_home[1], h, 0])
+    hover(drone, t_hover=1.2)
     land(drone)
-
 
 TO_FLY = 1
 
@@ -271,7 +274,7 @@ if __name__ == '__main__':
     drone2.pose_home = drone2.position
     drone3.pose_home = drone3.position
 
-    # print('Home positions:', drone1.pose_home, drone2.pose_home, drone3.pose_home)
+    print('Home positions:', drone1.pose_home, drone2.pose_home, drone3.pose_home)
 
     if TO_FLY:
         th1 = Thread(target=prepare, args=(drone1,) )
@@ -279,10 +282,15 @@ if __name__ == '__main__':
         th3 = Thread(target=prepare, args=(drone3,) )
         th1.start(); th2.start(); th3.start()
         th1.join(); th2.join(); th3.join()
+        print('Number of drones estimated pose: ',
+              drone1.estimated_pose + drone2.estimated_pose + drone3.estimated_pose)
 
-    print('Number of drones estimated pose: ',
-          drone1.estimated_pose + drone2.estimated_pose + drone3.estimated_pose)
-    raw_input("Press Enter to continue...")
+    print("Press F to fly...")
+    while True:
+        char = getch()
+        if (char == "f"):
+            print("Stop!")
+            break
 
     print("Starting the mission!")
     th1 = Thread(target=spiral_trajectory, args=(drone1, np.pi/3, 0) )

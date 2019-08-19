@@ -17,6 +17,7 @@ from cflib.crazyflie.log import LogConfig
 from cflib.positioning.motion_commander import MotionCommander
 
 import rospy
+from std_msgs.msg import Float64
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
@@ -55,7 +56,8 @@ def normalize(vector):
 class DroneMultiranger:
     def __init__(self, URI):
     	# Tool to process the data from drone's sensors
-    	self.processing = Processing(URI)
+    	# self.processing = Processing(URI)
+        self.id = URI[-2:]
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
         self.scf = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
@@ -122,25 +124,25 @@ class DroneMultiranger:
         except AttributeError:
             print('Could not add Position log config, bad configuration.')
 
-        lmeas = LogConfig(name='Meas', period_in_ms=100)
-        lmeas.add_variable('range.front')
-        lmeas.add_variable('range.back')
-        lmeas.add_variable('range.up')
-        lmeas.add_variable('range.left')
-        lmeas.add_variable('range.right')
-        lmeas.add_variable('range.zrange')
-        lmeas.add_variable('stabilizer.roll')
-        lmeas.add_variable('stabilizer.pitch')
-        lmeas.add_variable('stabilizer.yaw')
-        try:
-            self.cf.log.add_config(lmeas)
-            lmeas.data_received_cb.add_callback(self.meas_data)
-            lmeas.start()
-        except KeyError as e:
-            print('Could not start log configuration,'
-                  '{} not found in TOC'.format(str(e)))
-        except AttributeError:
-            print('Could not add Measurement log config, bad configuration.')
+        # lmeas = LogConfig(name='Meas', period_in_ms=100)
+        # lmeas.add_variable('range.front')
+        # lmeas.add_variable('range.back')
+        # lmeas.add_variable('range.up')
+        # lmeas.add_variable('range.left')
+        # lmeas.add_variable('range.right')
+        # lmeas.add_variable('range.zrange')
+        # lmeas.add_variable('stabilizer.roll')
+        # lmeas.add_variable('stabilizer.pitch')
+        # lmeas.add_variable('stabilizer.yaw')
+        # try:
+        #     self.cf.log.add_config(lmeas)
+        #     lmeas.data_received_cb.add_callback(self.meas_data)
+        #     lmeas.start()
+        # except KeyError as e:
+        #     print('Could not start log configuration,'
+        #           '{} not found in TOC'.format(str(e)))
+        # except AttributeError:
+        #     print('Could not add Measurement log config, bad configuration.')
 
         lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
         lbat.add_variable('pm.vbat', 'float')
@@ -192,6 +194,9 @@ class DroneMultiranger:
 
     def battery_data(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
+        # publish battery status as ROS msg
+        pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
+        pub.publish(self.V_bat)
         # print('Battery status: %.2f [V]' %self.V_bat)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
