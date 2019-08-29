@@ -23,7 +23,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
 import rospy
-from multiranger import DroneMultiranger
+from multiranger1 import DroneMultiranger
 
 
 # URI to the Crazyflie to connect to
@@ -37,17 +37,21 @@ if __name__ == '__main__':
     drone = DroneMultiranger(URI1)
 
     drone.mc = MotionCommander(drone.cf)
-    drone.mc.take_off(0.2, 0.2)
+    drone.mc.take_off(0.1, 0.1)
     time.sleep(1)
 
-    for _ in range(6):
-		print('Battery charge: %.2f [V]', drone.V_bat)
-		if not drone.battery_state == 'needs_charging':
-			drone.mc.circle_right(0.8, velocity=0.5, angle_degrees=360)
-			drone.mc.up(0.15)
-			time.sleep(1)
-		else:
-			break
+    for _ in range(5):
+        drone.mc.circle_right(0.9, velocity=0.5, angle_degrees=360)
+        drone.mc.up(0.1)
+        time.sleep(1)
+
+    drone.mc.down(0.05)
+    time.sleep(1)
+
+    for _ in range(5):
+        drone.mc.circle_right(0.9, velocity=0.5, angle_degrees=360)
+        drone.mc.down(0.1)
+        time.sleep(1)
 
     drone.mc.land(0.2)
     time.sleep(1)

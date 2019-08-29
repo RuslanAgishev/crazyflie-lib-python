@@ -25,7 +25,7 @@ import rospy
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
-from multiranger_scf import DroneMultiranger
+from multiranger import DroneMultiranger
 from threading import Thread
 
 def msg_def_PoseStamped(pose, orient):

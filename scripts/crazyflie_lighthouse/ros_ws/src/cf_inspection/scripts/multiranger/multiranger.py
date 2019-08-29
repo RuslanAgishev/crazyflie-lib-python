@@ -31,13 +31,17 @@ PLOT_CF = True
 SENSOR_TH = 1500
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 0.15
+# freguency of getting scans
+SENSOR_FREQUENCY = 50
+print('Multiranger frequency:', SENSOR_FREQUENCY)
 
 V_BATTERY_TO_GO_HOME = 3.5 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
 WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
-
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
+
+ONLY_RIGHT_RANGER = 1 # if True, pointcloud is build using only right ranger of the Crazyflie
 
 def is_close(range):
     MIN_DISTANCE = 350 # mm
@@ -55,15 +59,17 @@ class DroneMultiranger:
     def __init__(self, URI):
     	# Tool to process the data from drone's sensors
     	self.processing = Processing(URI)
+        self.id = URI[-2:]
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
-        self.cf = Crazyflie(ro_cache=None, rw_cache='./cache')
+        self.scf = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
+        self.cf = self.scf.cf
         # Connect callbacks from the Crazyflie API
         self.cf.connected.add_callback(self.connected)
         self.cf.disconnected.add_callback(self.disconnected)
         # Connect to the Crazyflie
         self.cf.open_link(URI)
-        time.sleep(3)
+
 
     def sendVelocityCommand(self):
         direction = normalize(self.goal - self.position)
@@ -103,7 +109,7 @@ class DroneMultiranger:
         print('We are now connected to {}'.format(URI))
 
         # The definition of the logconfig can be made before connecting
-        lpos = LogConfig(name='Position', period_in_ms=100)
+        lpos = LogConfig(name='Position', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lpos.add_variable('lighthouse.x')
         lpos.add_variable('lighthouse.y')
         lpos.add_variable('lighthouse.z')
@@ -120,7 +126,7 @@ class DroneMultiranger:
         except AttributeError:
             print('Could not add Position log config, bad configuration.')
 
-        lmeas = LogConfig(name='Meas', period_in_ms=100)
+        lmeas = LogConfig(name='Meas', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lmeas.add_variable('range.front')
         lmeas.add_variable('range.back')
         lmeas.add_variable('range.up')
@@ -199,7 +205,7 @@ class DroneMultiranger:
             self.battery_state = 'fully_charged'
 
 
-class Processing:
+class Processing():
     def __init__(self, URI):
         self.last_pos = [0, 0, 0]
         self.path = Path()
@@ -281,21 +287,22 @@ class Processing:
         pitch = -m['pitch']
         yaw = m['yaw']
 
-        if (m['left'] < SENSOR_TH):
-            left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, left))
-
         if (m['right'] < SENSOR_TH):
             right = [o[0], o[1] - m['right'] / 1000.0, o[2]]
             data.append(self.rot(roll, pitch, yaw, o, right))
 
-        if (m['front'] < SENSOR_TH):
-            front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, front))
+        if not ONLY_RIGHT_RANGER:
+            if (m['left'] < SENSOR_TH):
+                left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, left))
 
-        if (m['back'] < SENSOR_TH):
-            back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, back))
+            if (m['front'] < SENSOR_TH):
+                front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, front))
+
+            if (m['back'] < SENSOR_TH):
+                back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, back))
 
         return data
 
@@ -338,8 +345,9 @@ class Processing:
         pub.publish(msg)
 
     def write_to_file(self, data):
+        data.insert(0, self.last_pos)
+        data_to_write = np.array(data)
         with open(self.csv_filename, mode='a') as file:
             writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            for coord in data:
-                writer.writerow(coord)
+            writer.writerow(data_to_write.flatten())
 

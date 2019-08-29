@@ -22,7 +22,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
 import rospy
-from multiranger_scf import DroneMultiranger
+from multiranger import DroneMultiranger
 
 
 # URI to the Crazyflie to connect to

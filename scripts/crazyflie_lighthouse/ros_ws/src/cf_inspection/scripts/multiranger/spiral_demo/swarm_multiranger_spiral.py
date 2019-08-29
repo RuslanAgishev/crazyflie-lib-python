@@ -25,7 +25,7 @@ import rospy
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
-from multiranger_scf import DroneMultiranger
+from multiranger import DroneMultiranger
 from threading import Thread
 
 
@@ -289,7 +289,6 @@ if __name__ == '__main__':
     while True:
         char = getch()
         if (char == "f"):
-            print("Stop!")
             break
 
     print("Starting the mission!")
@@ -298,4 +297,5 @@ if __name__ == '__main__':
     th3 = Thread(target=spiral_trajectory, args=(drone3, 5*np.pi/3, 10.66) )
     th1.start(); th2.start(); th3.start()
     th1.join(); th2.join(); th3.join()
+
 
