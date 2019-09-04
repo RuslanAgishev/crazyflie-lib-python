@@ -7,17 +7,14 @@ import sys
 import csv
 
 import numpy as np
+from numpy.linalg import norm
 import time
-from threading import Thread
-import thread
-from multiprocessing import Process
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.positioning.motion_commander import MotionCommander
-from cflib.utils.multiranger import Multiranger
 
 import rospy
 from tf.transformations import quaternion_from_euler
@@ -27,100 +24,82 @@ from sensor_msgs.msg import PointCloud2, PointField
 
 
 logging.basicConfig(level=logging.INFO)
-URI = 'radio://0/80/2M/E7E7E7E702'
-if len(sys.argv) > 1:
-    URI = sys.argv[1]
 
 # Enable plotting of Crazyflie
-PLOT_CF = 0
+PLOT_CF = True
 # Set the sensor threashold (in mm)
-SENSOR_TH = 1500
+SENSOR_TH = 1000
 # Set the speed factor for moving and rotating
-SPEED_FACTOR = 0.1
+SPEED_FACTOR = 0.15
+# freguency of getting scans
+SENSOR_FREQUENCY = 50
+print('Multiranger frequency:', SENSOR_FREQUENCY)
 
-V_BATTERY_TO_GO_HOME = 3.4 # [V]
+V_BATTERY_TO_GO_HOME = 3.5 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
-WRITE_TO_FILE = 0
+WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
+GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
 
-
+ONLY_RIGHT_RANGER = 0 # if True, pointcloud is build using only right ranger of the Crazyflie
 
 def is_close(range):
-    MIN_DISTANCE = 350  # mm
-
+    MIN_DISTANCE = 350 # mm
     if range is None:
         return False
     else:
         return range < MIN_DISTANCE
 
+def normalize(vector):
+    vector = np.array(vector)
+    v_norm = vector / norm(vector) if norm(vector)!=0 else np.zeros_like(vector)
+    return v_norm
 
-class Drone:
+class DroneMultiranger:
     def __init__(self, URI):
+    	# Tool to process the data from drone's sensors
+    	self.processing = Processing(URI)
+        self.id = URI[-2:]
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
-        self.cf = Crazyflie(ro_cache=None, rw_cache='./cache')
+        self.scf = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
+        self.cf = self.scf.cf
         # Connect callbacks from the Crazyflie API
         self.cf.connected.add_callback(self.connected)
         self.cf.disconnected.add_callback(self.disconnected)
         # Connect to the Crazyflie
         self.cf.open_link(URI)
-        # Tool to process the data from drone's sensors
-        # self.processing = Processing()
-        
-        self.motion_commander = MotionCommander(self.cf)
-        time.sleep(3)
-        self.motion_commander.take_off(0.3, 0.2)
-        time.sleep(1)
 
-        self.motion_commander.start_forward(0.15)
-        time.sleep(0.5)
 
-        self.stop_recording = []
-        thread.start_new_thread(self.land_command, ())
+    def sendVelocityCommand(self):
+        direction = normalize(self.goal - self.position)
+        v_x = SPEED_FACTOR * direction[0]
+        v_y = SPEED_FACTOR * direction[1]
+        v_z = SPEED_FACTOR * direction[2]
 
-        self.start_mission()
-
-    def land_command(self):
-        raw_input()
-        self.stop_recording.append(True)
-        print('Landing...')
-        self.motion_commander.stop()
-        self.motion_commander.land(0.2)
-        time.sleep(1)
-
-    def start_mission(self):
-        rate = rospy.Rate(4000)
-        while not self.stop_recording:
-            print('fly')
-            self.sendHoverCommand()
-            rate.sleep()
-
-    def sendHoverCommand(self):
-        """
-        Change UAV flight direction based on obstacles detected with multiranger.
-        """
-        if is_close(self.measurement['front']) and self.measurement['left'] > self.measurement['right']:
-            print('FRONT RIGHT')
-            self.motion_commander.stop()
-            self.motion_commander.turn_left(60, 70)
-            self.motion_commander.start_forward(0.15)
-        if is_close(self.measurement['front']) and self.measurement['left'] < self.measurement['right']:
-            print('FRONT LEFT')
-            self.motion_commander.stop()
-            self.motion_commander.turn_right(60, 70)
-            self.motion_commander.start_forward(0.15)
+        # Local movement correction from obstacles
+        dV = 0.1 # [m/s]
         if is_close(self.measurement['left']):
-            print('LEFT')
-            self.motion_commander.right(0.1, 0.2)
-            self.motion_commander.stop()
-            self.motion_commander.turn_right(45, 70)
-            self.motion_commander.start_forward(0.15)
+            # print('Obstacle on the LEFT')
+            v_y -= dV
         if is_close(self.measurement['right']):
-            print('RIGHT')
-            self.motion_commander.left(0.1, 0.2)
-            self.motion_commander.stop()
-            self.motion_commander.turn_left(45, 70)
-            self.motion_commander.start_forward(0.15)
+            # print('Obstacle on the RIGHT')
+            v_y += dV
+
+        self.velocity['x'] = v_x
+        self.velocity['y'] = v_y
+        self.velocity['z'] = v_z
+        # print('Sending velocity:', self.velocity)
+
+        goal_dist = norm(self.goal - self.position)
+        # print('Distance to goal %.2f [m]:' %goal_dist)
+        if goal_dist < GOAL_TOLERANCE: # goal is reached
+            # print('Goal is reached. Going home...')
+            self.goal = self.pose_home
+
+        self.cf.commander.send_velocity_world_setpoint(
+            self.velocity['x'], self.velocity['y'], self.velocity['z'],
+            self.velocity['yaw'])
 
 
     def disconnected(self, URI):
@@ -130,7 +109,7 @@ class Drone:
         print('We are now connected to {}'.format(URI))
 
         # The definition of the logconfig can be made before connecting
-        lpos = LogConfig(name='Position', period_in_ms=100)
+        lpos = LogConfig(name='Position', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lpos.add_variable('lighthouse.x')
         lpos.add_variable('lighthouse.y')
         lpos.add_variable('lighthouse.z')
@@ -147,7 +126,7 @@ class Drone:
         except AttributeError:
             print('Could not add Position log config, bad configuration.')
 
-        lmeas = LogConfig(name='Meas', period_in_ms=100)
+        lmeas = LogConfig(name='Meas', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lmeas.add_variable('range.front')
         lmeas.add_variable('range.back')
         lmeas.add_variable('range.up')
@@ -195,9 +174,9 @@ class Drone:
             data['stabilizer.pitch'],
             data['stabilizer.yaw']
         ]
-        self.position = position
-        self.orientation = orientation
-        # self.processing.set_position(position, orientation)
+        self.position = np.array(position)
+        self.orientation = np.array(orientation)
+        self.processing.set_position(position, orientation)
 
     def meas_data(self, timestamp, data, logconf):
         measurement = {
@@ -212,7 +191,7 @@ class Drone:
             'right': data['range.right']
         }
         self.measurement = measurement
-        # self.processing.set_measurement(measurement)
+        self.processing.set_measurement(measurement)
 
 
     def battery_data(self, timestamp, data, logconf):
@@ -221,16 +200,19 @@ class Drone:
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
             # print('Battery is not charged: %.2f' %self.V_bat)
+            self.goal = self.pose_home
         elif self.V_bat >= V_BATTERY_CHARGED:
             self.battery_state = 'fully_charged'
 
 
-class Processing:
-    def __init__(self):
+class Processing():
+    def __init__(self, URI):
         self.last_pos = [0, 0, 0]
         self.path = Path()
         self.meas_data = np.array([0, 0, 0], ndmin=2)
         self.lines = []
+        self.csv_filename = 'coordsXYZ'+str(time.time())+'.csv'
+        self.id = URI[-2:]
 
     def msg_def_PoseStamped(self, pose, orient):
         worldFrame = "base_link"
@@ -241,7 +223,7 @@ class Processing:
         msg.pose.position.x = pose[0]
         msg.pose.position.y = pose[1]
         msg.pose.position.z = pose[2]
-        orient = np.array(orient) / 180*3.14
+        orient = np.array(orient) / 180*math.pi
         quaternion = quaternion_from_euler(orient[0], orient[1], orient[2]) #1.57
         msg.pose.orientation.x = quaternion[0]
         msg.pose.orientation.y = quaternion[1]
@@ -266,8 +248,8 @@ class Processing:
         self.last_pos = pose
         if PLOT_CF:
             # publish to ROS topic for visualization:
-            self.publish_pose(pose, orient, 'cf_pose')
-            self.publish_path(self.path, pose, orient, 'cf_path', limit=200)
+            self.publish_pose(pose, orient, 'cf'+str(self.id)+'_pose')
+            self.publish_path(self.path, pose, orient, 'cf'+str(self.id)+'_path', limit=1000)
 
     def rot(self, roll, pitch, yaw, origin, point):
         cosr = math.cos(math.radians(roll))
@@ -305,21 +287,22 @@ class Processing:
         pitch = -m['pitch']
         yaw = m['yaw']
 
-        if (m['left'] < SENSOR_TH):
-            left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, left))
-
         if (m['right'] < SENSOR_TH):
             right = [o[0], o[1] - m['right'] / 1000.0, o[2]]
             data.append(self.rot(roll, pitch, yaw, o, right))
 
-        if (m['front'] < SENSOR_TH):
-            front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, front))
+        if not ONLY_RIGHT_RANGER:
+            if (m['left'] < SENSOR_TH):
+                left = [o[0], o[1] + m['left'] / 1000.0, o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, left))
 
-        if (m['back'] < SENSOR_TH):
-            back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
-            data.append(self.rot(roll, pitch, yaw, o, back))
+            if (m['front'] < SENSOR_TH):
+                front = [o[0] + m['front'] / 1000.0, o[1], o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, front))
+
+            if (m['back'] < SENSOR_TH):
+                back = [o[0] - m['back'] / 1000.0, o[1], o[2]]
+                data.append(self.rot(roll, pitch, yaw, o, back))
 
         return data
 
@@ -329,8 +312,8 @@ class Processing:
         if len(data) > 0:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
-        if PLOT_CF: self.publish_pointcloud(self.meas_data, 'multiranger_pointcloud', limit=2000)
-        if WRITE_TO_FILE: self.write_to_file()
+        self.publish_pointcloud(self.meas_data, 'multiranger'+str(self.id)+'_pointcloud', limit=-1)
+        if WRITE_TO_FILE: self.write_to_file(data)
 
     def xyz_array_to_pointcloud2(self, points, limit):
         '''
@@ -361,12 +344,10 @@ class Processing:
         pub = rospy.Publisher(topic_name, PointCloud2, queue_size=1)
         pub.publish(msg)
 
-    def write_to_file(self):
-        with open('coordinates.csv', mode='w') as file:
+    def write_to_file(self, data):
+        data.insert(0, self.last_pos)
+        data_to_write = np.array(data)
+        with open(self.csv_filename, mode='a') as file:
             writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(self.meas_data)
+            writer.writerow(data_to_write.flatten())
 
-
-if __name__ == '__main__':
-    rospy.init_node('drone_multiranger')
-    drone = Drone(URI)
