@@ -16,9 +16,11 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
+
 import rospy
 from multiranger import DroneMultiranger
 import time
+from threading import Thread
 
 
 def wait_for_position_estimator(scf):
@@ -101,7 +103,9 @@ def plot_robot(pose, yaw, params):
 	plt.plot(pose[0], pose[1], 'ro', markersize=5)
 	plot_arrow(pose[0], pose[1], yaw)
 
-def borders_check(pose, params, gmap):
+def borders_check(pose, params):
+	gmap = params.gmap
+
 	r = int(100*params.sensor_range_m)
 	back = [pose[0]-r*np.cos(pose[2]), pose[1]-r*np.sin(pose[2])]
 	front = [pose[0]+r*np.cos(pose[2]), pose[1]+r*np.sin(pose[2])]
@@ -144,7 +148,6 @@ def borders_check(pose, params, gmap):
 			if gmap[j,i]:
 				# print('RIGHT collision')
 				border['right'] = 1
-
 	return border
 
 def meters2grid(pose_m, nrows=200, ncols=200):
@@ -166,7 +169,7 @@ def grid2meters(pose_grid, nrows=200, ncols=200):
         pose_meters = ( np.array(pose_grid) - np.array([ncols/2, nrows/2]) ) / 100.0
     return pose_meters
 
-def visualize(traj, pose_m, yaw):
+def visualize(traj, pose_m, yaw, params):
 	ax = plt.gca()
 	ax.set_xlim([-2.5, 2.5])
 	ax.set_ylim([-2.5, 2.5])
@@ -176,31 +179,6 @@ def visualize(traj, pose_m, yaw):
 	plt.plot(traj[:,0], traj[:,1], 'g')
 	plot_robot(pose_m, yaw, params)
 
-
-class Params:
-	def __init__(self):
-		self.map_width_m = 2.0
-		self.map_length_m = 2.0
-		self.sensor_range_m = 0.1
-		self.wall_thickness_m = 2*self.sensor_range_m
-		self.simulation_time = 10 # [sec]
-		self.numiters = 300
-		self.vel = 0.3 # [m/s]
-		self.uri = 'radio://0/80/2M/E7E7E7E702'
-		self.flight_height = 0.2 # [m]
-		self.toFly = 1
-
-params = Params()
-
-WIDTH = int(100 * (params.map_width_m))
-LENGTH = int(100 * (params.map_length_m))
-border = int(100 * params.wall_thickness_m)
-gmap = np.zeros([WIDTH, LENGTH])
-# walls
-gmap[:border, :] = 1
-gmap[-border:, :] = 1
-gmap[:, :border] = 1
-gmap[:, -border:] = 1
 
 def takeoff(drone, height=0.2):
     # takeoff to z=0.3 m:
@@ -245,47 +223,36 @@ def is_close(range):
         return range < MIN_DISTANCE
 
 
-def main():
-	rospy.init_node('random_walk')
-
-	drone = DroneMultiranger(params.uri)
-	time.sleep(3)
+def explorasion_mission(drone, params):
 	drone.pose_home = drone.position
 	print('Home positions:', drone.pose_home)
-
-	if params.toFly:
-		prepare(drone)
-		raw_input('Press Enter to fly...')
-		takeoff(drone, params.flight_height)
-
 	#    x,    y,      yaw
 	pose = [meters2grid(drone.pose_home[0]), meters2grid(drone.pose_home[1]), 0.0]
 	traj = grid2meters(pose[:2])
-	plt.figure(figsize=(8,8))
-	# while True:
+	
 	for _ in range(params.numiters):
 		vel = 10*params.vel
 		pose[0] += vel*np.cos(pose[2])
 		pose[1] += vel*np.sin(pose[2])
 
-		border = borders_check(pose, params, gmap)
+		border = borders_check(pose, params)
 		# print(border)
 
 		if border['right'] or border['front']:
 			print('Border in FRONT or RIGHT')
-			pose[2] -= np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose[2] -= np.pi/2 * np.random.uniform(0.1, 0.6)
 		elif border['left']:
 			print('Border on the LEFT')
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.6)
 
 		if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
 			print('FRONT RIGHT')
 			pose[:2] = back_shift(pose, 5)
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.6)
 		if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
 			print('FRONT LEFT')
 			pose[:2] = back_shift(pose, 5)
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.6)
 		if is_close(drone.measurement['left']):
 			print('LEFT')
 			pose[:2] = right_shift(pose, 5)
@@ -302,14 +269,76 @@ def main():
 		if params.toFly:
 			fly(drone)
 
-			plt.cla()
-			visualize(traj, pose_m, pose[2])
-			plt.pause(0.1)
+			time.sleep(0.1)
 
-	visualize(traj,pose_m, pose[2])
+	# visualize(traj,pose_m, pose[2], params)
 	if params.toFly: land(drone)
-	plt.show()
+	
 
+
+class Params:
+	def __init__(self):
+		self.map_width_m = 2.4
+		self.map_length_m = 2.4
+		self.sensor_range_m = 0.1
+		self.wall_thickness_m = 2*self.sensor_range_m
+		self.simulation_time = 10 # [sec]
+		self.numiters = 400
+		self.vel = 0.15 # [m/s]
+		self.uris = [
+					# 'radio://0/80/2M/E7E7E7E701',
+					'radio://0/80/2M/E7E7E7E702',
+					'radio://0/80/2M/E7E7E7E703',
+					]
+		self.flight_height = 0.2 # [m]
+		self.toFly = 1
+		self.create_borders_grid_map()
+
+	def create_borders_grid_map(self):
+		WIDTH = int(100 * (self.map_width_m))
+		LENGTH = int(100 * (self.map_length_m))
+		border = int(100 * self.wall_thickness_m)
+		gmap = np.zeros([WIDTH, LENGTH])
+		# walls
+		gmap[:border, :] = 1
+		gmap[-border:, :] = 1
+		gmap[:, :border] = 1
+		gmap[:, -border:] = 1
+		self.gmap = gmap
+
+
+def main():
+	rospy.init_node('swarm_random_walk')
+	params = Params()
+	drones = []
+	for URI in params.uris:
+		drone = DroneMultiranger(URI)
+		drones.append(drone)
+	time.sleep(3)
+
+	if params.toFly:
+		th1 = Thread(target=prepare, args=(drones[0],) )
+		th2 = Thread(target=prepare, args=(drones[1],) )
+		th1.start(); th2.start();
+		th1.join(); th2.join();
+
+		raw_input('Press Enter to fly...')
+		th1 = Thread(target=takeoff, args=(drones[0], params.flight_height,) )
+		th2 = Thread(target=takeoff, args=(drones[1], params.flight_height,) )
+		th1.start(); th2.start();
+		th1.join(); th2.join();
+	
+		# th1 = Thread(target=land, args=(drones[0],) )
+		# th2 = Thread(target=land, args=(drones[1],) )
+		# th1.start(); th2.start();
+		# th1.join(); th2.join();
+
+	time.sleep(0.2)
+
+	th1 = Thread(target=explorasion_mission, args=(drones[0], params,) )
+	th2 = Thread(target=explorasion_mission, args=(drones[1], params,) )
+	th1.start(); th2.start();
+	th1.join(); th2.join();
 
 
 if __name__ == '__main__':

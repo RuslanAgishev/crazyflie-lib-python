@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 # Enable plotting of Crazyflie
 PLOT_CF = True
 # Set the sensor threashold (in mm)
-SENSOR_TH = 1000
+SENSOR_TH = 2000
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 0.15
 # freguency of getting scans
