@@ -9,6 +9,7 @@ reference: https://ieeexplore.ieee.org/abstract/document/6850799/s
 
 import matplotlib.pyplot as plt
 from matplotlib import patches
+from matplotlib.patches import Polygon
 import numpy as np
 
 import cflib.crtp
@@ -92,7 +93,8 @@ def plot_arrow(x, y, yaw, length=0.1, width=0.1):  # pragma: no cover
               head_length=width, head_width=width)
     plt.plot(x, y)
 
-def plot_robot(pose, yaw, params):
+def plot_robot(pose, params):
+	yaw = pose[2]
 	r = int(params.sensor_range_m)
 	plt.plot([pose[0]-r*np.cos(yaw), pose[0]+r*np.cos(yaw)],
 			 [pose[1]-r*np.sin(yaw), pose[1]+r*np.sin(yaw)], '--', color='b')
@@ -101,7 +103,9 @@ def plot_robot(pose, yaw, params):
 	plt.plot(pose[0], pose[1], 'ro', markersize=5)
 	plot_arrow(pose[0], pose[1], yaw)
 
-def borders_check(pose, params, gmap):
+def borders_check(pose, params):
+	gmap = params.gmap
+
 	r = int(100*params.sensor_range_m)
 	back = [pose[0]-r*np.cos(pose[2]), pose[1]-r*np.sin(pose[2])]
 	front = [pose[0]+r*np.cos(pose[2]), pose[1]+r*np.sin(pose[2])]
@@ -123,84 +127,70 @@ def borders_check(pose, params, gmap):
 
 	for i in np.arange(min(pi[0], fronti[0]), max(pi[0], fronti[0])+1):
 		for j in np.arange(min(pi[1], fronti[1]), max(pi[1], fronti[1])+1):
-			if gmap[j,i]:
+			m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
+			if gmap[m,n]:
 				# print('FRONT collision')
 				border['front'] = 1
 
 	for i in np.arange(min(pi[0], backi[0]), max(pi[0], backi[0])+1):
 		for j in np.arange(min(pi[1], backi[1]), max(pi[1], backi[1])+1):
-			if gmap[j,i]:
+			m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
+			if gmap[m,n]:
 				# print('BACK collision')
 				border['back'] = 1
 
 	for i in np.arange(min(pi[0], lefti[0]), max(pi[0], lefti[0])+1):
 		for j in np.arange(min(pi[1], lefti[1]), max(pi[1], lefti[1])+1):
-			if gmap[j,i]:
+			m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
+			if gmap[m,n]:
 				# print('LEFT collision')
 				border['left'] = 1
 
 	for i in np.arange(min(pi[0], righti[0]), max(pi[0], righti[0])+1):
 		for j in np.arange(min(pi[1], righti[1]), max(pi[1], righti[1])+1):
-			if gmap[j,i]:
+			m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
+			if gmap[m,n]:
 				# print('RIGHT collision')
 				border['right'] = 1
 
 	return border
 
-def meters2grid(pose_m, nrows=200, ncols=200):
+def meters2grid(pose_m, params):
     # [0, 0](m) -> [100, 100]
     # [1, 0](m) -> [100+100, 100]
     # [0,-1](m) -> [100, 100-100]
+    nrows = int(params.map_width_X_m / params.map_resolution_m)
+    ncols = int(params.map_length_Y_m / params.map_resolution_m)
     if np.isscalar(pose_m):
-        pose_on_grid = int( pose_m*100 + ncols/2 )
+        pose_on_grid = int( pose_m/params.map_resolution_m + ncols/2 )
     else:
-        pose_on_grid = np.array( np.array(pose_m)*100 + np.array([ncols/2, nrows/2]), dtype=int )
+        pose_on_grid = np.array( np.array(pose_m)/params.map_resolution_m +\
+        						 np.array([ncols/2, nrows/2]) -\
+        						 params.map_center/params.map_resolution_m, dtype=int )
     return pose_on_grid
-def grid2meters(pose_grid, nrows=200, ncols=200):
+def grid2meters(pose_grid, params):
     # [100, 100] -> [0, 0](m)
     # [100+100, 100] -> [1, 0](m)
     # [100, 100-100] -> [0,-1](m)
+    nrows = int(params.map_width_X_m / params.map_resolution_m)
+    ncols = int(params.map_length_Y_m / params.map_resolution_m)
     if np.isscalar(pose_grid):
-        pose_meters = (pose_grid - ncols/2) / 100.0
+        pose_meters = (pose_grid - ncols/2) * params.map_resolution_m
     else:
-        pose_meters = ( np.array(pose_grid) - np.array([ncols/2, nrows/2]) ) / 100.0
+        pose_meters = ( np.array(pose_grid) - np.array([ncols/2, nrows/2]) ) *\
+        			    params.map_resolution_m - params.map_center
     return pose_meters
 
-def visualize(traj, pose_m, yaw):
+def visualize(traj, pose, params):
 	ax = plt.gca()
 	ax.set_xlim([-2.5, 2.5])
 	ax.set_ylim([-2.5, 2.5])
-	# Draw virtual borders
-	rect = patches.Rectangle((-params.map_length_m/2.,-params.map_width_m/2.),params.map_length_m,params.map_width_m,linewidth=1,edgecolor='k',facecolor='none')
-	ax.add_patch(rect)
+	w = params.map_length_Y_m; l = params.map_width_X_m; c = params.map_center
+	boundaries = np.array([ c+[-w/2., -l/2.], c+[-w/2., +l/2.], c+[+w/2., +l/2.], c+[+w/2., -l/2.] ])
+	ax.add_patch( Polygon(boundaries, linewidth=2, edgecolor='k',facecolor='none') )
 	plt.plot(traj[:,0], traj[:,1], 'g')
-	plot_robot(pose_m, yaw, params)
+	plot_robot(pose, params)
 
-
-class Params:
-	def __init__(self):
-		self.map_width_m = 2.0
-		self.map_length_m = 2.0
-		self.sensor_range_m = 0.1
-		self.wall_thickness_m = 2*self.sensor_range_m
-		self.simulation_time = 10 # [sec]
-		self.numiters = 300
-		self.vel = 0.3 # [m/s]
-		self.uri = 'radio://0/80/2M/E7E7E7E702'
-		self.flight_height = 0.2 # [m]
-		self.toFly = 1
-
-params = Params()
-
-WIDTH = int(100 * (params.map_width_m))
-LENGTH = int(100 * (params.map_length_m))
-border = int(100 * params.wall_thickness_m)
-gmap = np.zeros([WIDTH, LENGTH])
-# walls
-gmap[:border, :] = 1
-gmap[-border:, :] = 1
-gmap[:, :border] = 1
-gmap[:, -border:] = 1
 
 def takeoff(drone, height=0.2):
     # takeoff to z=0.3 m:
@@ -228,13 +218,16 @@ def stop(drone):
     drone.cf.commander.send_stop_setpoint()
 
 def left_shift(pose, r):
-	left = [pose[0]+r*np.cos(pose[2]+np.pi/2), pose[1]+r*np.sin(pose[2]+np.pi/2)]
+	left = pose
+	left[:2] = [pose[0]+r*np.cos(pose[2]+np.pi/2), pose[1]+r*np.sin(pose[2]+np.pi/2)]
 	return left
 def right_shift(pose, r):
-	right = [pose[0]-r*np.cos(pose[2]+np.pi/2), pose[1]-r*np.sin(pose[2]+np.pi/2)]
+	right = pose
+	right[:2] = [pose[0]-r*np.cos(pose[2]+np.pi/2), pose[1]-r*np.sin(pose[2]+np.pi/2)]
 	return right
 def back_shift(pose, r):
-	back = [pose[0]-r*np.cos(pose[2]), pose[1]-r*np.sin(pose[2])]
+	back = pose
+	back[:2] = [pose[0]-r*np.cos(pose[2]), pose[1]-r*np.sin(pose[2])]
 	return back
 
 def is_close(range):
@@ -245,8 +238,37 @@ def is_close(range):
         return range < MIN_DISTANCE
 
 
+class Params:
+	def __init__(self):
+		self.map_center = np.array([-0.5, 0.0])
+		self.map_width_X_m = 1.0
+		self.map_length_Y_m = 2.0
+		self.map_resolution_m = 0.01
+		self.sensor_range_m = 0.1
+		self.wall_thickness_m = 1.0*self.sensor_range_m
+		self.numiters = 300
+		self.vel = 0.3 # [m/s]
+		self.uri = 'radio://0/80/2M/E7E7E7E702'
+		self.flight_height = 0.4 # [m]
+		self.toFly = 0
+		self.create_borders_grid_map()
+
+	def create_borders_grid_map(self):
+		WIDTH = int(100 * (self.map_width_X_m))
+		LENGTH = int(100 * (self.map_length_Y_m))
+		border = int(100 * self.wall_thickness_m)
+		gmap = np.zeros([WIDTH, LENGTH])
+		# walls
+		gmap[:border, :] = 1
+		gmap[-border:, :] = 1
+		gmap[:, :border] = 1
+		gmap[:, -border:] = 1
+		self.gmap = gmap
+
+
 def main():
 	rospy.init_node('random_walk')
+	params = Params()
 
 	drone = DroneMultiranger(params.uri)
 	time.sleep(3)
@@ -259,54 +281,57 @@ def main():
 		takeoff(drone, params.flight_height)
 
 	#    x,    y,      yaw
-	pose = [meters2grid(drone.pose_home[0]), meters2grid(drone.pose_home[1]), 0.0]
-	traj = grid2meters(pose[:2])
+	pose = [drone.pose_home[0], drone.pose_home[1], 0.0]
+	# pose = [params.map_center[0], params.map_center[1], 0.0]
+	traj = pose[:2]
 	plt.figure(figsize=(8,8))
 	# while True:
 	for _ in range(params.numiters):
-		vel = 10*params.vel
-		pose[0] += vel*np.cos(pose[2])
-		pose[1] += vel*np.sin(pose[2])
+		dv = 0.1*params.vel
+		pose[0] += dv*np.cos(pose[2])
+		pose[1] += dv*np.sin(pose[2])
 
-		border = borders_check(pose, params, gmap)
+		pose_grid = meters2grid(pose[:2], params)
+		border = borders_check([pose_grid[0], pose_grid[1], pose[2]], params)
 		# print(border)
 
 		if border['right'] or border['front']:
 			print('Border in FRONT or RIGHT')
-			pose[2] -= np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose = back_shift(pose, 0.03)
+			pose[2] -= np.pi/2 * np.random.uniform(0.2, 0.6)
 		elif border['left']:
 			print('Border on the LEFT')
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			pose = back_shift(pose, 0.03)
+			pose[2] += np.pi/2 * np.random.uniform(0.2, 0.6)
 
-		if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
-			print('FRONT RIGHT')
-			pose[:2] = back_shift(pose, 5)
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
-		if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
-			print('FRONT LEFT')
-			pose[:2] = back_shift(pose, 5)
-			pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
-		if is_close(drone.measurement['left']):
-			print('LEFT')
-			pose[:2] = right_shift(pose, 5)
-		if is_close(drone.measurement['right']):
-			print('RIGHT')
-			pose[:2] = left_shift(pose, 5)
+		if params.toFly:
+			if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
+				print('FRONT RIGHT')
+				pose = back_shift(pose, 0.05)
+				pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
+				print('FRONT LEFT')
+				pose = back_shift(pose, 0.05)
+				pose[2] += np.pi/2 * np.random.uniform(0.1, 0.8)
+			if is_close(drone.measurement['left']):
+				print('LEFT')
+				pose = right_shift(pose, 0.05)
+			if is_close(drone.measurement['right']):
+				print('RIGHT')
+				pose = left_shift(pose, 0.05)
 
-
-		pose_m = grid2meters(pose[:2])
-		traj = np.vstack([traj, pose_m])
+		traj = np.vstack([traj, pose[:2]])
 		
-		drone.sp = [pose_m[0], pose_m[1], params.flight_height, np.degrees(pose[2])%360]
+		drone.sp = [pose[0], pose[1], params.flight_height, np.degrees(pose[2])%360]
 
 		if params.toFly:
 			fly(drone)
 
 			plt.cla()
-			visualize(traj, pose_m, pose[2])
+			visualize(traj, pose, params)
 			plt.pause(0.1)
 
-	visualize(traj,pose_m, pose[2])
+	visualize(traj, pose, params)
 	if params.toFly: land(drone)
 	plt.show()
 
