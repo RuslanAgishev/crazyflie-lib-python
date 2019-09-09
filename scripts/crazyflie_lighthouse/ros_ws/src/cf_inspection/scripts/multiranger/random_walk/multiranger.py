@@ -35,7 +35,7 @@ SPEED_FACTOR = 0.15
 SENSOR_FREQUENCY = 50
 print('Multiranger frequency:', SENSOR_FREQUENCY)
 
-V_BATTERY_TO_GO_HOME = 3.5 # [V]
+V_BATTERY_TO_GO_HOME = 3.3 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
 WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
@@ -44,7 +44,7 @@ GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is close
 ONLY_RIGHT_RANGER = 0 # if True, pointcloud is build using only right ranger of the Crazyflie
 
 def is_close(range):
-    MIN_DISTANCE = 400 # mm
+    MIN_DISTANCE = 350 # mm
     if range is None:
         return False
     else:
