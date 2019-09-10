@@ -156,11 +156,11 @@ def search_free_grid_index_at_edge_y(grid_map, from_upper=False):
     xinds = []
 
     if from_upper:
-        xrange = range(grid_map.height)[::-1]
-        yrange = range(grid_map.width)[::-1]
+        xrange = range(int(grid_map.height))[::-1]
+        yrange = range(int(grid_map.width))[::-1]
     else:
-        xrange = range(grid_map.height)
-        yrange = range(grid_map.width)
+        xrange = range(int(grid_map.height))
+        yrange = range(int(grid_map.width))
 
     for iy in xrange:
         for ix in yrange:

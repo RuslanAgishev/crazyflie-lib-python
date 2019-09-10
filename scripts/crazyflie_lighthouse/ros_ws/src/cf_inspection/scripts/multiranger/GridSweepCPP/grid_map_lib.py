@@ -38,7 +38,7 @@ class GridMap:
                             (self.height / 2.0) * self.resolution
 
         self.ndata = self.width * self.height
-        self.data = [init_val] * self.ndata
+        self.data = [init_val] * int(self.ndata)
 
     def get_value_from_xy_index(self, x_ind, y_ind):
         """get_value_from_xy_index
@@ -127,8 +127,8 @@ class GridMap:
             pol_y.append(pol_y[0])
 
         # setting value for all grid
-        for x_ind in range(self.width):
-            for y_ind in range(self.height):
+        for x_ind in range(int(self.width)):
+            for y_ind in range(int(self.height)):
                 x_pos, y_pos = self.calc_grid_central_xy_position_from_xy_index(
                     x_ind, y_ind)
 
@@ -171,8 +171,8 @@ class GridMap:
     def expand_grid(self):
         xinds, yinds = [], []
 
-        for ix in range(self.width):
-            for iy in range(self.height):
+        for ix in range(int(self.width)):
+            for iy in range(int(self.height)):
                 if self.check_occupied_from_xy_index(ix, iy):
                     xinds.append(ix)
                     yinds.append(iy)
@@ -208,7 +208,7 @@ class GridMap:
 
     def plot_grid_map(self, ax=None):
 
-        grid_data = np.reshape(np.array(self.data), (self.height, self.width))
+        grid_data = np.reshape(np.array(self.data), (int(self.height), int(self.width)))
         if not ax:
             fig, ax = plt.subplots()
         heat_map = ax.pcolor(grid_data, cmap="Blues", vmin=0.0, vmax=1.0)

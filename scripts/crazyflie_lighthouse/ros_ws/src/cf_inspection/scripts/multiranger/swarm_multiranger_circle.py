@@ -28,6 +28,19 @@ from nav_msgs.msg import Path
 from multiranger import DroneMultiranger
 from threading import Thread
 
+
+import sys, termios, tty, os, time
+def getch():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+ 
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
 def msg_def_PoseStamped(pose, orient):
     worldFrame = "base_link"
     msg = PoseStamped()
@@ -120,6 +133,21 @@ def prepare(scf):
     reset_estimator(scf)
     activate_mellinger_controller(scf, False)
 
+def fly(drone):
+    sp = drone.sp
+    drone.cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
+def land(drone):
+    print('Landing...')
+    while drone.sp[2]>-0.1:
+        drone.sp[2] -= 0.02
+        fly(drone)
+        time.sleep(0.1)
+    stop(drone)
+    # Make sure that the last packet leaves before the link is closed
+    # since the message queue is not flushed before closing
+    time.sleep(0.1)
+def stop(drone):
+    drone.cf.commander.send_stop_setpoint()
 
 def circle_trajectory(drone, initial_angle=0):
     '''
@@ -143,13 +171,22 @@ def circle_trajectory(drone, initial_angle=0):
     def fly_one_circle():
         # circular trajectory
         for t in angular_range:
+            # Check battery status
+            try:
+                if drone.battery_state == 'needs_charging':
+                    print('Going home to CHARGE the battery')
+                    break
+            except:
+                pass
             yaw = (t - np.pi/2) % (2*np.pi)
             sp = [R*np.cos(t), R*np.sin(t), h, 180*yaw/np.pi]
+            drone.sp = sp
             if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
             q = quaternion_from_euler(0,0,yaw)
             publish_pose(sp[:3], orient=q, topic_name='pose'+label)
             publish_path(drone.path, sp[:3], topic_name='path'+label)
             time.sleep(dt)
+
 
     commander = drone.cf.commander
     hl_commander = drone.cf.high_level_commander
@@ -158,8 +195,8 @@ def circle_trajectory(drone, initial_angle=0):
 
     N_samples = 160; dt = 0.1
     angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, N_samples)
-    R = 0.9; h = 0.1; dh = 0.1
-    numiters = 10
+    R = 0.7; h = 0.1; dh = 0.1
+    numiters = 5
     t0 = time.time()
 
     if TO_FLY:
@@ -175,10 +212,14 @@ def circle_trajectory(drone, initial_angle=0):
         time.sleep(flight_time)
         # hl_commander.land(0.0, 2.0)
         # time.sleep(2)
-        hl_commander.stop()
-        time.sleep(0.01)
+        # hl_commander.stop()
+        # time.sleep(0.1)
 
     print('Drone velocity: %.2f [m/s]' %(2*np.pi*R/(N_samples*0.1)))
+    drone.sp = np.array([R*np.cos(initial_angle),
+                         R*np.sin(initial_angle),
+                         h,
+                         initial_angle - np.pi/2])
 
     # Trajectory
     for _ in range(numiters):
@@ -195,7 +236,12 @@ def circle_trajectory(drone, initial_angle=0):
         print('Height: %.2f [m]' %h)
         fly_one_circle()
     print('Time passed: %2.f [sec]' %(time.time()-t0))
-
+    
+    land(drone)
+    hl_commander.stop()
+    time.sleep(0.1)
+    commander.send_stop_setpoint()
+    time.sleep(0.1)
 
 TO_FLY = 1
 
@@ -210,28 +256,32 @@ if __name__ == '__main__':
     rospy.init_node('drone_multiranger')
 
     drone1 = DroneMultiranger(URI1)
-    drone2 = DroneMultiranger(URI2)
+    # drone2 = DroneMultiranger(URI2)
     # drone3 = DroneMultiranger(URI3)
     time.sleep(4)
     
     drone1.pose_home = drone1.position
-    drone2.pose_home = drone2.position
+    # drone2.pose_home = drone2.position
     # drone3.pose_home = drone3.position
 
     # print('Home positions:', drone1.pose_home, drone2.pose_home, drone3.pose_home)
 
     if TO_FLY:
         th1 = Thread(target=prepare, args=(drone1.scf,) )
-        th2 = Thread(target=prepare, args=(drone2.scf,) )
+        # th2 = Thread(target=prepare, args=(drone2.scf,) )
         # th3 = Thread(target=prepare, args=(drone3.scf,) )
-        th1.start(); th2.start(); #th3.start()
-        th1.join(); th2.join(); #th3.join()
+        th1.start(); #th2.start(); #th3.start()
+        th1.join(); #th2.join(); #th3.join()
 
-    raw_input('Press Enter to fly...')
+    print("Press F to fly...")
+    while True:
+        char = getch()
+        if (char == "f"):
+            break
 
     th1 = Thread(target=circle_trajectory, args=(drone1, np.pi/2,) )
-    th2 = Thread(target=circle_trajectory, args=(drone2, 3*np.pi/2,) )
+    # th2 = Thread(target=circle_trajectory, args=(drone2, 3*np.pi/2,) )
     # th3 = Thread(target=circle_trajectory, args=(drone3, 5*np.pi/3,) )
-    th1.start(); th2.start(); #th3.start()
-    th1.join(); th2.join(); #th3.join()
+    th1.start(); #th2.start(); #th3.start()
+    th1.join(); #th2.join(); #th3.join()
 

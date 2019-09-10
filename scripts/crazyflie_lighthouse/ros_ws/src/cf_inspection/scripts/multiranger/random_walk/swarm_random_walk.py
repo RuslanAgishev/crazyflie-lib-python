@@ -228,7 +228,7 @@ def exploration_mission(drone, params):
 	pose = [drone.pose_home[0], drone.pose_home[1], 0.0]
 	traj = pose[:2]
 
-	for _ in range(params.numiters):
+	for j in range(params.numiters):
 		dv = 0.1*params.vel
 		pose[0] += dv*np.cos(pose[2])
 		pose[1] += dv*np.sin(pose[2])
@@ -270,12 +270,13 @@ def exploration_mission(drone, params):
 		drone.sp = [pose[0], pose[1], params.flight_height, np.degrees(pose[2])%360]
 		drone.pose = pose
 
-		try:
-			if drone.battery_state == 'needs_charging':
-				print('Going home to CHARGE the battery')
-				break
-		except:
-			pass
+		if params.check_battery:
+			try:
+				if drone.battery_state == 'needs_charging':
+					print('Going home to CHARGE the battery')
+					break
+			except:
+				pass
 
 		if params.toFly:
 			fly(drone)
@@ -289,7 +290,7 @@ def exploration_mission(drone, params):
 
 class Params:
 	def __init__(self):
-		self.numiters = 100
+		self.numiters = 800
 		self.vel = 0.2 # [m/s]
 		self.uris = [
 					# 'radio://0/80/2M/E7E7E7E701',
@@ -297,6 +298,7 @@ class Params:
 					'radio://0/80/2M/E7E7E7E703',
 					]
 		self.flight_height = 0.2 # [m]
+		self.check_battery = 0
 		self.toFly = 1
 
 
@@ -311,15 +313,14 @@ def main():
 	time.sleep(3)
 
 	# Define flight zones for each UAV:
-	flight_area1 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/2 + np.array([ 0.5, 0.0])
-	flight_area2 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/2 + np.array([-0.5, 0.0])
+	# flight_area1 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/1.5 + np.array([ 0.6, 0.0])
+	# flight_area2 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/1.5 + np.array([-0.6, 0.0])
+	
+	flight_area1 = np.array([[-1.0, 1.0], [-1.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
+	flight_area2 = np.array([[-1.0, 1.0], [-1.0, 0.0], [1.0, 0.0], [1.0, 1.0]]) + np.array([0.0, -1.0])
+	
 	drones[0].gridmap_params = GridMap(flight_area1)
 	drones[1].gridmap_params = GridMap(flight_area2)
-
-	# plt.imshow(drones[0].gridmap_params.gmap, cmap='gray')
-	# plt.show()
-	# plt.imshow(drones[1].gridmap_params.gmap, cmap='gray')
-	# plt.show()
 
 	if params.toFly:
 		th1 = Thread(target=prepare, args=(drones[0],) )

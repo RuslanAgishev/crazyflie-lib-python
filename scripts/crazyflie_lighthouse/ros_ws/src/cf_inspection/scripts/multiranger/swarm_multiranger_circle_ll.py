@@ -208,6 +208,13 @@ def circular_trajectory(drone, initial_angle=0):
     def rotate_one_circle():
         # circular trajectory
         for t in angular_range:
+            # Check battery status
+            try:
+                if drone.battery_state == 'needs_charging':
+                    print('Going home to CHARGE the battery')
+                    break
+            except:
+                pass
             yaw = 0 #(t - np.pi/2) % (2*np.pi)
             sp = [R*np.cos(t), R*np.sin(t), h, 180*yaw/np.pi]
             if TO_FLY: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
@@ -222,7 +229,7 @@ def circular_trajectory(drone, initial_angle=0):
     # print('Ready to fly', drone.id)
     commander = drone.cf.commander
     angular_range = np.linspace(0+initial_angle, 2*np.pi+initial_angle, 160)
-    R = 0.9; h = 0.1; dh = 0.1
+    R = 0.7; h = 0.1; dh = 0.1
     numiters = 5
     
     takeoff(drone, height=h)
@@ -244,8 +251,8 @@ def circular_trajectory(drone, initial_angle=0):
         print('Height: %.2f [m]' %h)
         rotate_one_circle()
 
-    goTo(drone, [drone.pose_home[0], drone.pose_home[1], h, 0])
-    hover(drone, t_hover=1.2)
+    # goTo(drone, [drone.pose_home[0], drone.pose_home[1], h, 0])
+    # hover(drone, t_hover=1.2)
     land(drone)
 
 
@@ -260,22 +267,22 @@ if __name__ == '__main__':
     rospy.init_node('drone_multiranger')
 
     drone1 = DroneMultiranger(URI1)
-    drone2 = DroneMultiranger(URI2)
+    # drone2 = DroneMultiranger(URI2)
     # drone3 = DroneMultiranger(URI3)
     time.sleep(4)
     
     drone1.pose_home = drone1.position
-    drone2.pose_home = drone2.position
+    # drone2.pose_home = drone2.position
     # drone3.pose_home = drone3.position
 
     # print('Home positions:', drone1.pose_home, drone2.pose_home, drone3.pose_home)
 
     if TO_FLY:
         th1 = Thread(target=prepare, args=(drone1,) )
-        th2 = Thread(target=prepare, args=(drone2,) )
+        # th2 = Thread(target=prepare, args=(drone2,) )
         # th3 = Thread(target=prepare, args=(drone3,) )
-        th1.start(); th2.start(); #th3.start()
-        th1.join(); th2.join(); #th3.join()
+        th1.start(); #th2.start(); #th3.start()
+        th1.join(); #th2.join(); #th3.join()
 
     print("Press F to fly...")
     while True:
@@ -285,9 +292,9 @@ if __name__ == '__main__':
 
     print("Starting the mission!")
     th1 = Thread(target=circular_trajectory, args=(drone1, np.pi/2,) ) # np.pi/3,
-    th2 = Thread(target=circular_trajectory, args=(drone2, 3*np.pi/2,) )
+    # th2 = Thread(target=circular_trajectory, args=(drone2, 3*np.pi/2,) )
     # th3 = Thread(target=circular_trajectory, args=(drone3, 5*np.pi/3,) )
-    th1.start(); th2.start(); #th3.start()
-    th1.join(); th2.join(); #th3.join()
+    th1.start(); #th2.start(); #th3.start()
+    th1.join(); #th2.join(); #th3.join()
 
 
