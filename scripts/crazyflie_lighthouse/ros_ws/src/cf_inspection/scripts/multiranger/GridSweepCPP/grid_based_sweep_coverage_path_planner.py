@@ -212,7 +212,7 @@ def sweep_path_search(sweep_searcher, gmap, grid_search_animation=False):
         cxind, cyind = sweep_searcher.move_target_grid(cxind, cyind, gmap)
 
         if sweep_searcher.is_search_done(gmap) or (cxind is None or cyind is None):
-            print("Done")
+            print("Sweep path search is Done")
             break
 
         x, y = gmap.calc_grid_central_xy_position_from_xy_index(
