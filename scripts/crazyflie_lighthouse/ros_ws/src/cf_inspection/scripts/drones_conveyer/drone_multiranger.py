@@ -34,7 +34,7 @@ SENSOR_TH = 4000
 SPEED_FACTOR = 0.15
 
 V_BATTERY_TO_GO_HOME = 3.5 # [V]
-V_BATTERY_CHARGED = 3.9    # [V]
+V_BATTERY_CHARGED = 4.1    # [V]
 
 WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
@@ -68,37 +68,8 @@ class DroneMultiranger:
         # Connect to the Crazyflie
         self.cf.open_link(URI)
 
-
-    def sendVelocityCommand(self):
-        direction = normalize(self.goal - self.position)
-        v_x = SPEED_FACTOR * direction[0]
-        v_y = SPEED_FACTOR * direction[1]
-        v_z = SPEED_FACTOR * direction[2]
-
-        # Local movement correction from obstacles
-        dV = 0.1 # [m/s]
-        if is_close(self.measurement['left']):
-            # print('Obstacle on the LEFT')
-            v_y -= dV
-        if is_close(self.measurement['right']):
-            # print('Obstacle on the RIGHT')
-            v_y += dV
-
-        self.velocity['x'] = v_x
-        self.velocity['y'] = v_y
-        self.velocity['z'] = v_z
-        # print('Sending velocity:', self.velocity)
-
-        goal_dist = norm(self.goal - self.position)
-        # print('Distance to goal %.2f [m]:' %goal_dist)
-        if goal_dist < GOAL_TOLERANCE: # goal is reached
-            # print('Goal is reached. Going home...')
-            self.goal = self.pose_home
-
-        self.cf.commander.send_velocity_world_setpoint(
-            self.velocity['x'], self.velocity['y'], self.velocity['z'],
-            self.velocity['yaw'])
-
+    def disconnect(self):
+        self.cf.close_link()
 
     def disconnected(self, URI):
         print('Disconnected')
