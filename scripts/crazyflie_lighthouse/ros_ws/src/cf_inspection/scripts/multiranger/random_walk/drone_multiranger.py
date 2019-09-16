@@ -21,6 +21,7 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import Float64
 
 
 logging.basicConfig(level=logging.INFO)
@@ -32,13 +33,13 @@ SENSOR_TH = 2000
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 0.15
 # freguency of getting scans
-SENSOR_FREQUENCY = 50
-print('Multiranger frequency:', SENSOR_FREQUENCY)
+SENSOR_FREQUENCY = 10
+print('Position, Battery and Multiranger update rate:', SENSOR_FREQUENCY)
 
 V_BATTERY_TO_GO_HOME = 3.3 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
 
-WRITE_TO_FILE = 1 # writing a pointcloud data to a csv file
+WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
 
 ONLY_RIGHT_RANGER = 0 # if True, pointcloud is build using only right ranger of the Crazyflie
@@ -146,7 +147,8 @@ class DroneMultiranger:
         except AttributeError:
             print('Could not add Measurement log config, bad configuration.')
 
-        lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
+        # lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
+        lbat = LogConfig(name='Battery', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lbat.add_variable('pm.vbat', 'float')
         try:
             self.cf.log.add_config(lbat)
@@ -197,6 +199,9 @@ class DroneMultiranger:
     def battery_data(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
         # print('Battery status: %.2f [V]' %self.V_bat)
+        # publish battery status as ROS msg
+        pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
+        pub.publish(self.V_bat)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
             # print('Battery is not charged: %.2f' %self.V_bat)
@@ -312,7 +317,7 @@ class Processing():
         if len(data) > 0:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
-        self.publish_pointcloud(self.meas_data, 'multiranger'+str(self.id)+'_pointcloud', limit=-1)
+        self.publish_pointcloud(self.meas_data, 'multiranger'+str(self.id)+'_pointcloud', limit=5000)
         if WRITE_TO_FILE: self.write_to_file(data)
 
     def xyz_array_to_pointcloud2(self, points, limit):

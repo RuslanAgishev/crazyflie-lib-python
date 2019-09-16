@@ -19,7 +19,7 @@ from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
 
 import rospy
-from multiranger import DroneMultiranger
+from drone_multiranger import DroneMultiranger
 import time
 from threading import Thread
 
@@ -151,16 +151,12 @@ def takeoff(drone, height=0.2):
 def fly(drone):
 	sp = drone.sp
 	drone.cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-def land(drone):
+def land(drone, height=-0.02):
     print('Landing...')
-    while drone.sp[2]>-0.1:
+    while drone.sp[2]>height:
         drone.sp[2] -= 0.02
         fly(drone)
-        time.sleep(0.1)
-    drone.cf.commander.send_stop_setpoint()
-    # Make sure that the last packet leaves before the link is closed
-    # since the message queue is not flushed before closing
-    time.sleep(0.1)    
+        time.sleep(0.1)   
 def goTo(drone, goal, pos_tol=0.03, yaw_tol=3):
     def normalize(vector):
         vector = np.array(vector)
@@ -218,14 +214,16 @@ def visualize(drone):
 	plt.plot(drone.traj[:,0], drone.traj[:,1], label='Drone '+drone.id+' trajectory')
 	plot_robot(drone.pose, drone.gridmap_params)
 
-def exploration_mission(drone, params):
+def exploration_mission(drone, flight_height, params):
 	drone.pose_home = drone.position
 	print('Home positions:', drone.pose_home)
 
-	if params.toFly: takeoff(drone, params.flight_height)
+	if params.toFly:
+		takeoff(drone, 0.3)
+		goTo(drone, [drone.last_sp[0], drone.last_sp[1], flight_height, 0])
 
 	#    x,    y,      yaw
-	pose = [drone.pose_home[0], drone.pose_home[1], 0.0]
+	pose = [drone.last_sp[0], drone.last_sp[1], 0.0]
 	traj = pose[:2]
 
 	for j in range(params.numiters):
@@ -267,13 +265,14 @@ def exploration_mission(drone, params):
 		traj = np.vstack([traj, pose[:2]])
 		drone.traj = traj
 
-		drone.sp = [pose[0], pose[1], params.flight_height, np.degrees(pose[2])%360]
+		drone.sp = [pose[0], pose[1], flight_height, np.degrees(pose[2])%360]
 		drone.pose = pose
 
 		if params.check_battery:
 			try:
 				if drone.battery_state == 'needs_charging':
 					print('Going home to CHARGE the battery')
+					drone.last_sp = drone.position
 					break
 			except:
 				pass
@@ -283,23 +282,40 @@ def exploration_mission(drone, params):
 			time.sleep(0.1)
 
 	if params.toFly:
-		goTo(drone, [drone.pose_home[0], drone.pose_home[1], params.flight_height, 0])
+		goTo(drone, [drone.pose_home[0], drone.pose_home[1], 0.2, 0])
 		hover(drone, 1.0)
 		land(drone)
 
 
+def exploration_conveyer(drone, flight_height, params):
+	# while True:
+    for _ in range(params.num_missions):
+        # Waiting for the battery to become charged
+        while True:
+            try:
+                if (drone.battery_state == 'fully_charged'):
+                    print('Battery status: %.2f [V]' %drone.V_bat)
+                    break
+            except:
+                pass
+        # One flight mission
+        print("Starting the mission!")
+        exploration_mission(drone, flight_height, params)
+        time.sleep(params.time_between_missions)
+
 class Params:
 	def __init__(self):
-		self.numiters = 800
+		self.numiters = 300
 		self.vel = 0.2 # [m/s]
 		self.uris = [
 					# 'radio://0/80/2M/E7E7E7E701',
-					'radio://0/80/2M/E7E7E7E702',
+					'radio://1/120/2M/E7E7E7E702',
 					'radio://0/80/2M/E7E7E7E703',
 					]
-		self.flight_height = 0.2 # [m]
-		self.check_battery = 0
+		self.check_battery = 1
 		self.toFly = 1
+		self.num_missions = 5
+		self.time_between_missions = 5 # sec
 
 
 def main():
@@ -312,35 +328,53 @@ def main():
 		drones.append(drone)
 	time.sleep(3)
 
+	for drone in drones:
+		drone.last_sp = drone.position
+
 	# Define flight zones for each UAV:
 	# flight_area1 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/1.5 + np.array([ 0.6, 0.0])
 	# flight_area2 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/1.5 + np.array([-0.6, 0.0])
 	
-	flight_area1 = np.array([[-1.0, 1.0], [-1.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
-	flight_area2 = np.array([[-1.0, 1.0], [-1.0, 0.0], [1.0, 0.0], [1.0, 1.0]]) + np.array([0.0, -1.0])
-	
-	drones[0].gridmap_params = GridMap(flight_area1)
-	drones[1].gridmap_params = GridMap(flight_area2)
+	flight_areas = [
+					np.array([[-1.0, 1.0], [-1.0, -1.0], [-0.5, -1.0], [-0.5, 1.0]]),
+					np.array([[-0.5, 1.0], [-0.5, 0.0], [1.0, 0.0], [1.0, 1.0]]),
+					np.array([[-0.5, 0.0], [-0.5, -1.0], [1.0, -1.0], [1.0, 0.0]]),
+					]
+
+	for fl in range(len(drones)):
+		drones[fl].gridmap_params = GridMap(flight_areas[fl])
 
 	if params.toFly:
-		th1 = Thread(target=prepare, args=(drones[0],) )
-		th2 = Thread(target=prepare, args=(drones[1],) )
-		th1.start(); th2.start();
-		th1.join(); th2.join();
+		threads = []
+		for drone in drones:
+			th = Thread(target=prepare, args=(drone,) )
+			threads.append(th)
+		for th in threads: th.start()
+		for th in threads: th.join()
 
 		raw_input('Press Enter to fly...')
 
-	th1 = Thread(target=exploration_mission, args=(drones[0], params,) )
-	th2 = Thread(target=exploration_mission, args=(drones[1], params,) )
-	th1.start(); th2.start();
-	th1.join(); th2.join();
+	th1 = Thread(target=exploration_conveyer, args=(drones[0], 0.9, params,) )
+	th2 = Thread(target=exploration_conveyer, args=(drones[1], 0.6, params,) )
+	# th3 = Thread(target=exploration_conveyer, args=(drones[2], 0.3, params,) )
+	th1.start(); th2.start();# th3.start();
+	th1.join(); th2.join(); #th3.join();
+
 
 	plt.figure(figsize=(10,10))
 	for drone in drones:
 		drone.gridmap_params.draw_map()
 		visualize(drone)
 		plt.legend()
-	plt.show()
+	plt.draw()
+	plt.pause(0.1)
+	raw_input('Hit Enter to close all windows')
+	plt.close('all')
+
+	for drone in drones:
+		drone.cf.commander.send_stop_setpoint()
+		time.sleep(0.1) 
+		drone.cf.close_link()
 
 if __name__ == '__main__':
 	try:

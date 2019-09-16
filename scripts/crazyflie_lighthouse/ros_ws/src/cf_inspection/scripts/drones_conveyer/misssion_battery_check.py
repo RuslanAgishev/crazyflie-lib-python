@@ -263,6 +263,7 @@ def waypoints_mission(drone, waypoints):
 
 TO_FLY = 1
 NUM_MISSIONS = 3
+TIME_BETWEEN_MISSIONS = 5
 
 # URI to the Crazyflie to connect to
 uris = [
@@ -319,7 +320,7 @@ if __name__ == '__main__':
                        [0.0, -0.4, 0.6, 0],
                       ]
         waypoints_mission(drones[0], wp_sequence)
-        time.sleep(5)
+        time.sleep(TIME_BETWEEN_MISSIONS)
 
     for drone in drones:
         drone.disconnect()

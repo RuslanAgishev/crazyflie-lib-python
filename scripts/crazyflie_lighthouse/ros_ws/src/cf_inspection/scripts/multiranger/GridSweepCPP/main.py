@@ -201,6 +201,22 @@ def motion(state, goal, params):
 
     return state
 
+def avoid_obstacles_test(drone, params):
+    def is_close(measured_range):
+        # MIN_DISTANCE = 1000*params.sensor_range_m # mm
+        MIN_DISTANCE = 350 # mm
+        if measured_range is None:
+            return False
+        else:
+            return measured_range < MIN_DISTANCE
+    if is_close(drone.measurement['right']) or is_close(drone.measurement['front']):
+        drone.state = slow_down(drone.state, params)
+        drone.state = left_shift(drone.state, 0.05)
+        drone.state = turn_right(drone.state, np.radians(20))
+    elif is_close(drone.measurement['left']):
+        drone.state = slow_down(drone.state, params)
+        drone.state = right_shift(drone.state, 0.05)
+        drone.state = turn_left(drone.state, np.radians(20))
 
 def avoid_obstacles(drone, params):
     def is_close(measured_range):
@@ -214,13 +230,13 @@ def avoid_obstacles(drone, params):
     if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
         print('FRONT RIGHT')
         pose = slow_down(pose, params)
-        pose = back_shift(pose, 0.08)
-        pose = turn_left(pose, np.radians(30))
+        pose = back_shift(pose, 0.02)
+        pose = turn_left(pose, np.radians(40))
     if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
         print('FRONT LEFT')
         pose = slow_down(pose, params)
-        pose = back_shift(pose, 0.08)
-        pose = turn_right(pose, np.radians(30))
+        pose = back_shift(pose, 0.02)
+        pose = turn_right(pose, np.radians(40))
     if is_close(drone.measurement['left']):
         print('LEFT')
         pose = right_shift(pose, 0.08)
@@ -255,13 +271,14 @@ def flight_mission(drone, goal_x, goal_y, params):
             drone.state = turn_right(drone.state, np.radians(20))
 
         if params.toFly: avoid_obstacles(drone, params)
+        # if params.toFly: avoid_obstacles_test(drone, params)
 
         goal_dist = np.linalg.norm(goal - drone.state[:2])
         # print('Distance to goal %.2f [m]:' %goal_dist)
         t_current = time.time()
         if goal_dist < params.goal_tol or (t_current - t_prev_goal) > params.time_to_switch_goal: # goal is reached
             print('Switching to the next goal.')
-            print('Time from the previous reached goal:', t_current - t_prev_goal)
+            # print('Time from the previous reached goal:', t_current - t_prev_goal)
             if goali < len(goal_x) - 1:
                 goali += 1
             else:
@@ -310,11 +327,11 @@ class Params:
     def __init__(self):
         self.numiters = 500
         self.vel = 0.5 # [m/s]
-        self.uri = 'radio://0/80/2M/E7E7E7E703'
+        self.uri = 'radio://0/80/2M/E7E7E7E702'
         self.flight_height = 0.2 # [m]
         self.toFly = 1
         self.check_battery = 1
-        self.animate = 0
+        self.animate = 1
         self.dt = 0.1
         self.goal_tol = 0.3
         self.max_vel = 0.5 # m/s
