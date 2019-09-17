@@ -18,7 +18,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncLogger import SyncLogger
 import rospy
-from multiranger import DroneMultiranger
+from drone_multiranger import DroneMultiranger
 import time
 
 from grid_map import GridMap

@@ -151,12 +151,14 @@ def takeoff(drone, height=0.2):
 def fly(drone):
 	sp = drone.sp
 	drone.cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-def land(drone, height=-0.02):
+def land(drone, height=-0.1, land_speed=0.2):
     print('Landing...')
     while drone.sp[2]>height:
-        drone.sp[2] -= 0.02
+        drone.sp[2] -= land_speed*0.1
         fly(drone)
-        time.sleep(0.1)   
+        time.sleep(0.1)
+    drone.cf.commander.send_stop_setpoint()
+    time.sleep(0.1)
 def goTo(drone, goal, pos_tol=0.03, yaw_tol=3):
     def normalize(vector):
         vector = np.array(vector)
@@ -224,7 +226,6 @@ def exploration_mission(drone, flight_height, params):
 
 	#    x,    y,      yaw
 	pose = [drone.last_sp[0], drone.last_sp[1], 0.0]
-	traj = pose[:2]
 
 	for j in range(params.numiters):
 		dv = 0.1*params.vel
@@ -262,8 +263,7 @@ def exploration_mission(drone, flight_height, params):
 				# print('RIGHT')
 				pose = left_shift(pose, 0.05)
 
-		traj = np.vstack([traj, pose[:2]])
-		drone.traj = traj
+		drone.traj = np.vstack([drone.traj, pose[:2]])
 
 		drone.sp = [pose[0], pose[1], flight_height, np.degrees(pose[2])%360]
 		drone.pose = pose
@@ -286,35 +286,49 @@ def exploration_mission(drone, flight_height, params):
 		hover(drone, 1.0)
 		land(drone)
 
-
 def exploration_conveyer(drone, flight_height, params):
+	def land_to_charge(drone, params):
+		for _ in range(params.land_to_charge_attempts):
+			if drone.charging_state != 1:
+				takeoff(drone, drone.pose_home[2]+0.2)
+				goTo(drone, [drone.pose_home[0], drone.pose_home[1], drone.pose_home[2]+0.15, 0.0])
+				hover(drone, t_hover=4)
+				land(drone, height=drone.pose_home[2]+0.04, land_speed=0.05)
+				time.sleep(4)
+			else:
+				print('Charging started')
+				break
 	# while True:
-    for _ in range(params.num_missions):
-        # Waiting for the battery to become charged
-        while True:
-            try:
-                if (drone.battery_state == 'fully_charged'):
-                    print('Battery status: %.2f [V]' %drone.V_bat)
-                    break
-            except:
-                pass
-        # One flight mission
-        print("Starting the mission!")
-        exploration_mission(drone, flight_height, params)
-        time.sleep(params.time_between_missions)
+	for _ in range(params.num_missions):
+		if params.check_battery:
+		    # Waiting for the battery to become charged
+		    while True:
+		        try:
+		            if (drone.battery_state == 'fully_charged'):
+		                print('Battery status: %.2f [V]' %drone.V_bat)
+		                break
+		        except:
+		            pass
+		# One flight mission
+		print("Starting the mission!")
+		exploration_mission(drone, flight_height, params)
+		time.sleep(4)
+		land_to_charge(drone, params)
+		time.sleep(params.time_between_missions)
 
 class Params:
 	def __init__(self):
-		self.numiters = 300
+		self.numiters = 100
 		self.vel = 0.2 # [m/s]
 		self.uris = [
 					# 'radio://0/80/2M/E7E7E7E701',
-					'radio://1/120/2M/E7E7E7E702',
-					'radio://0/80/2M/E7E7E7E703',
+					'radio://0/80/2M/E7E7E7E702',
+					# 'radio://0/80/2M/E7E7E7E703',
 					]
 		self.check_battery = 1
 		self.toFly = 1
-		self.num_missions = 5
+		self.num_missions = 3
+		self.land_to_charge_attempts = 3
 		self.time_between_missions = 5 # sec
 
 
@@ -330,6 +344,7 @@ def main():
 
 	for drone in drones:
 		drone.last_sp = drone.position
+		drone.traj = drone.last_sp[:2]
 
 	# Define flight zones for each UAV:
 	# flight_area1 = np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])/1.5 + np.array([ 0.6, 0.0])
@@ -354,11 +369,11 @@ def main():
 
 		raw_input('Press Enter to fly...')
 
-	th1 = Thread(target=exploration_conveyer, args=(drones[0], 0.9, params,) )
-	th2 = Thread(target=exploration_conveyer, args=(drones[1], 0.6, params,) )
+	th1 = Thread(target=exploration_conveyer, args=(drones[0], 0.3, params,) )
+	# th2 = Thread(target=exploration_conveyer, args=(drones[1], 0.6, params,) )
 	# th3 = Thread(target=exploration_conveyer, args=(drones[2], 0.3, params,) )
-	th1.start(); th2.start();# th3.start();
-	th1.join(); th2.join(); #th3.join();
+	th1.start(); #th2.start();# th3.start();
+	th1.join(); #th2.join(); #th3.join();
 
 
 	plt.figure(figsize=(10,10))

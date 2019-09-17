@@ -21,7 +21,7 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, PointField
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, UInt8
 
 
 logging.basicConfig(level=logging.INFO)
@@ -33,8 +33,8 @@ SENSOR_TH = 2000
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 0.15
 # freguency of getting scans
-SENSOR_FREQUENCY = 50
-print('Multiranger frequency:', SENSOR_FREQUENCY)
+SENSOR_FREQUENCY = 10
+print('Position, Battery and Multiranger update rate:', SENSOR_FREQUENCY)
 
 V_BATTERY_TO_GO_HOME = 3.3 # [V]
 V_BATTERY_CHARGED = 3.9    # [V]
@@ -61,7 +61,6 @@ class DroneMultiranger:
     	# Tool to process the data from drone's sensors
     	self.processing = Processing(URI)
         self.id = URI[-2:]
-        self.uri = URI
 
         cflib.crtp.init_drivers(enable_debug_driver=False)
         self.scf = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
@@ -70,41 +69,10 @@ class DroneMultiranger:
         self.cf.connected.add_callback(self.connected)
         self.cf.disconnected.add_callback(self.disconnected)
         # Connect to the Crazyflie
-        self.cf.open_link(self.uri)
+        self.cf.open_link(URI)
 
     def disconnect(self):
         self.cf.close_link()
-
-    def sendVelocityCommand(self):
-        direction = normalize(self.goal - self.position)
-        v_x = SPEED_FACTOR * direction[0]
-        v_y = SPEED_FACTOR * direction[1]
-        v_z = SPEED_FACTOR * direction[2]
-
-        # Local movement correction from obstacles
-        dV = 0.1 # [m/s]
-        if is_close(self.measurement['left']):
-            # print('Obstacle on the LEFT')
-            v_y -= dV
-        if is_close(self.measurement['right']):
-            # print('Obstacle on the RIGHT')
-            v_y += dV
-
-        self.velocity['x'] = v_x
-        self.velocity['y'] = v_y
-        self.velocity['z'] = v_z
-        # print('Sending velocity:', self.velocity)
-
-        goal_dist = norm(self.goal - self.position)
-        # print('Distance to goal %.2f [m]:' %goal_dist)
-        if goal_dist < GOAL_TOLERANCE: # goal is reached
-            # print('Goal is reached. Going home...')
-            self.goal = self.pose_home
-
-        self.cf.commander.send_velocity_world_setpoint(
-            self.velocity['x'], self.velocity['y'], self.velocity['z'],
-            self.velocity['yaw'])
-
 
     def disconnected(self, URI):
         print('Disconnected')
@@ -150,8 +118,10 @@ class DroneMultiranger:
         except AttributeError:
             print('Could not add Measurement log config, bad configuration.')
 
-        lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
+        # lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
+        lbat = LogConfig(name='Battery', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lbat.add_variable('pm.vbat', 'float')
+        lbat.add_variable('pm.state', 'uint8_t')
         try:
             self.cf.log.add_config(lbat)
             lbat.data_received_cb.add_callback(self.battery_data)
@@ -200,10 +170,14 @@ class DroneMultiranger:
 
     def battery_data(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
+        self.charging_state = data['pm.state']
         # print('Battery status: %.2f [V]' %self.V_bat)
+        # print('Battery state:', data['pm.state'])
         # publish battery status as ROS msg
-        pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
-        pub.publish(self.V_bat)
+        Vbat_pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
+        Vbat_pub.publish(self.V_bat)
+        state_bat_pub = rospy.Publisher('cf'+self.id+'_charging_state', UInt8, queue_size=1)
+        state_bat_pub.publish(self.charging_state)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
             # print('Battery is not charged: %.2f' %self.V_bat)
@@ -242,7 +216,7 @@ class Processing():
         msg = self.msg_def_PoseStamped(pose, orient)
         pub = rospy.Publisher(topic_name, PoseStamped, queue_size=1)
         pub.publish(msg)
-    def publish_path(self, path, pose, orient, topic_name, limit=-1):
+    def publish_path(self,path, pose, orient, topic_name, limit=-1):
         msg = self.msg_def_PoseStamped(pose, orient)
         path.header = msg.header
         path.poses.append(msg)
@@ -319,7 +293,7 @@ class Processing():
         if len(data) > 0:
             self.meas_data = np.append(self.meas_data, data, axis=0)
         # ROS visualization of a PointCloud
-        self.publish_pointcloud(self.meas_data, 'multiranger'+str(self.id)+'_pointcloud', limit=-1)
+        self.publish_pointcloud(self.meas_data, 'multiranger'+str(self.id)+'_pointcloud', limit=5000)
         if WRITE_TO_FILE: self.write_to_file(data)
 
     def xyz_array_to_pointcloud2(self, points, limit):

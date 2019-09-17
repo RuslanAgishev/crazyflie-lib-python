@@ -28,18 +28,14 @@ def takeoff(drone, height=0.2):
 def fly(drone):
     sp = drone.sp
     drone.cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-def land(drone):
+def land(drone, height=-0.1, land_speed=0.2):
     print('Landing...')
-    while drone.sp[2]>-0.1:
-        drone.sp[2] -= 0.02
+    while drone.sp[2]>height:
+        drone.sp[2] -= land_speed*0.1
         fly(drone)
         time.sleep(0.1)
-    stop(drone)
-    # Make sure that the last packet leaves before the link is closed
-    # since the message queue is not flushed before closing
-    time.sleep(0.1)
-def stop(drone):
     drone.cf.commander.send_stop_setpoint()
+    time.sleep(0.1)
 def goTo(drone, goal, pos_tol=0.03, yaw_tol=3):
     def normalize(vector):
         vector = np.array(vector)
@@ -86,28 +82,6 @@ def slow_down(state, params, dv=0.1):
         state[3] -= dv
     return state
 
-def run_sequence(drone, sequence, params):
-    commander = drone.scf.cf.commander
-
-    if params.toFly:
-        takeoff(drone)
-        # Going to initial locations
-        goTo(drone, [sequence[0,0], sequence[0,1], sequence[0,2], sequence[0,3]])
-
-    for sp in sequence:
-        if params.toFly: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-        time.sleep(0.2)
-
-    # Landing...
-    while sp[2] > -0.1:
-        sp[2] -= 0.02
-        if params.toFly: commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
-        time.sleep(0.1)
-
-    if params.toFly: commander.send_stop_setpoint()
-    # Make sure that the last packet leaves before the link is closed
-    # since the message queue is not flushed before closing
-    time.sleep(0.1)
 
 def prepare(drone):
     scf = drone.scf
@@ -201,22 +175,6 @@ def motion(state, goal, params):
 
     return state
 
-def avoid_obstacles_test(drone, params):
-    def is_close(measured_range):
-        # MIN_DISTANCE = 1000*params.sensor_range_m # mm
-        MIN_DISTANCE = 350 # mm
-        if measured_range is None:
-            return False
-        else:
-            return measured_range < MIN_DISTANCE
-    if is_close(drone.measurement['right']) or is_close(drone.measurement['front']):
-        drone.state = slow_down(drone.state, params)
-        drone.state = left_shift(drone.state, 0.05)
-        drone.state = turn_right(drone.state, np.radians(20))
-    elif is_close(drone.measurement['left']):
-        drone.state = slow_down(drone.state, params)
-        drone.state = right_shift(drone.state, 0.05)
-        drone.state = turn_left(drone.state, np.radians(20))
 
 def avoid_obstacles(drone, params):
     def is_close(measured_range):
@@ -246,10 +204,9 @@ def avoid_obstacles(drone, params):
     drone.state = np.array(pose)
 
 def flight_mission(drone, goal_x, goal_y, params):
-    goali = 0
-    goal = [goal_x[goali], goal_y[goali]] # goal = [x, y], m
+    goal = [goal_x[drone.goali], goal_y[drone.goali]] # goal = [x, y], m
     # initial state = [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
-    drone.state = np.array([drone.pose_home[0], drone.pose_home[1], 0.0, 0.0, 0.0])
+    drone.state = np.array([drone.position[0], drone.position[1], 0.0, 0.0, 0.0])
     drone.traj = drone.state[:2]
     t_prev_goal = time.time()
 
@@ -271,7 +228,6 @@ def flight_mission(drone, goal_x, goal_y, params):
             drone.state = turn_right(drone.state, np.radians(20))
 
         if params.toFly: avoid_obstacles(drone, params)
-        # if params.toFly: avoid_obstacles_test(drone, params)
 
         goal_dist = np.linalg.norm(goal - drone.state[:2])
         # print('Distance to goal %.2f [m]:' %goal_dist)
@@ -279,12 +235,13 @@ def flight_mission(drone, goal_x, goal_y, params):
         if goal_dist < params.goal_tol or (t_current - t_prev_goal) > params.time_to_switch_goal: # goal is reached
             print('Switching to the next goal.')
             # print('Time from the previous reached goal:', t_current - t_prev_goal)
-            if goali < len(goal_x) - 1:
-                goali += 1
+            if drone.goali < len(goal_x) - 1:
+                drone.goali += 1
             else:
+                drone.goali = 0
                 break
             t_prev_goal = time.time()
-            goal = np.array([goal_x[goali], goal_y[goali]])
+            goal = np.array([goal_x[drone.goali], goal_y[drone.goali]])
 
 
         drone.sp = [drone.state[0], drone.state[1], params.flight_height, np.degrees(drone.state[2])%360]
@@ -315,12 +272,36 @@ def flight_mission(drone, goal_x, goal_y, params):
         hover(drone, 1.0)
         land(drone)
 
-    gridmap.draw_map()
-    plt.plot(goal_x, goal_y)
-    visualize(drone.traj, drone.state, params)
 
-    raw_input('Hit Enter to close all figures.')
-    plt.close('all')
+def exploration_conveyer(drone, goal_x, goal_y, params):
+    def land_to_charge(drone, params):
+        for _ in range(params.land_to_charge_attempts):
+            if drone.charging_state != 1:
+                takeoff(drone, drone.pose_home[2]+0.2)
+                goTo(drone, [drone.pose_home[0], drone.pose_home[1], drone.pose_home[2]+0.15, 0.0])
+                hover(drone, t_hover=4)
+                land(drone, height=drone.pose_home[2]+0.04, land_speed=0.05)
+                time.sleep(4)
+            else:
+                print('Charging started')
+                break
+    # while True:
+    for _ in range(params.num_missions):
+        if params.check_battery:
+            # Waiting for the battery to become charged
+            while True:
+                try:
+                    if (drone.battery_state == 'fully_charged'):
+                        print('Battery status: %.2f [V]' %drone.V_bat)
+                        break
+                except:
+                    pass
+        # One flight mission
+        print("Starting the mission!")
+        flight_mission(drone, goal_x, goal_y, params)
+        time.sleep(4)
+        if params.toFly: land_to_charge(drone, params)
+        time.sleep(params.time_between_missions)
 
 
 class Params:
@@ -328,26 +309,31 @@ class Params:
         self.numiters = 500
         self.vel = 0.5 # [m/s]
         self.uri = 'radio://0/80/2M/E7E7E7E702'
-        self.flight_height = 0.2 # [m]
+        self.flight_height = 0.4 # [m]
         self.toFly = 1
         self.check_battery = 1
-        self.animate = 1
+        self.animate = 0
         self.dt = 0.1
         self.goal_tol = 0.3
         self.max_vel = 0.5 # m/s
         self.min_vel = 0.1 # m/s
         self.sensor_range_m = 0.3 # m
         self.time_to_switch_goal = 10.0 # sec
+        self.land_to_charge_attempts = 3
+        self.num_missions = 3
+        self.time_between_missions = 5
+
 
 if __name__ == '__main__':
     rospy.init_node('random_walk')
     params = Params()
     drone = DroneMultiranger(params.uri)
     time.sleep(3)
+    drone.goali = 0
     drone.pose_home = drone.position
     print('Home positions:', drone.pose_home)
 
-    SCALE = 1.5
+    SCALE = 1.3
     flight_area_vertices = SCALE * np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])
     gridmap = GridMap(flight_area_vertices)
 
@@ -362,7 +348,15 @@ if __name__ == '__main__':
         raw_input('Press Enter to fly...')
         takeoff(drone, params.flight_height)
 
-    flight_mission(drone, goal_x, goal_y, params)
+    # flight_mission(drone, goal_x, goal_y, params)
+    exploration_conveyer(drone, goal_x, goal_y, params)
+
+    gridmap.draw_map()
+    plt.plot(goal_x, goal_y)
+    visualize(drone.traj, drone.state, params)
+
+    raw_input('Hit Enter to close all figures.')
+    plt.close('all')
 
     print('Mission is complete!')
     drone.disconnect()

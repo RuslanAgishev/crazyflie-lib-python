@@ -21,7 +21,7 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, PointField
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, UInt8
 
 
 logging.basicConfig(level=logging.INFO)
@@ -37,7 +37,7 @@ SENSOR_FREQUENCY = 10
 print('Position, Battery and Multiranger update rate:', SENSOR_FREQUENCY)
 
 V_BATTERY_TO_GO_HOME = 3.3 # [V]
-V_BATTERY_CHARGED = 3.9    # [V]
+V_BATTERY_CHARGED = 3.8    # [V]
 
 WRITE_TO_FILE = 0 # writing a pointcloud data to a csv file
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE
@@ -150,6 +150,7 @@ class DroneMultiranger:
         # lbat = LogConfig(name='Battery', period_in_ms=500) # read battery status with 2 Hz rate
         lbat = LogConfig(name='Battery', period_in_ms=int(1000./SENSOR_FREQUENCY))
         lbat.add_variable('pm.vbat', 'float')
+        lbat.add_variable('pm.state', 'uint8_t')
         try:
             self.cf.log.add_config(lbat)
             lbat.data_received_cb.add_callback(self.battery_data)
@@ -198,10 +199,14 @@ class DroneMultiranger:
 
     def battery_data(self, timestamp, data, logconf):
         self.V_bat = data['pm.vbat']
+        self.charging_state = data['pm.state']
         # print('Battery status: %.2f [V]' %self.V_bat)
+        # print('Battery state:', data['pm.state'])
         # publish battery status as ROS msg
-        pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
-        pub.publish(self.V_bat)
+        Vbat_pub = rospy.Publisher('cf'+self.id+'_Vbattery', Float64, queue_size=1)
+        Vbat_pub.publish(self.V_bat)
+        state_bat_pub = rospy.Publisher('cf'+self.id+'_charging_state', UInt8, queue_size=1)
+        state_bat_pub.publish(self.charging_state)
         if self.V_bat <= V_BATTERY_TO_GO_HOME:
             self.battery_state = 'needs_charging'
             # print('Battery is not charged: %.2f' %self.V_bat)
