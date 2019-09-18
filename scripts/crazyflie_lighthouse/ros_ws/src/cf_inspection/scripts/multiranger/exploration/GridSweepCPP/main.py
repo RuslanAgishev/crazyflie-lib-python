@@ -16,7 +16,7 @@ from drone_multiranger import DroneMultiranger
 from grid_map import GridMap
 
     
-def takeoff(drone, height=0.2):
+def takeoff(drone, height=0.3):
     # takeoff to z=0.3 m:
     print('Takeoff...')
     drone.sp = np.zeros(4); drone.sp[:3] = drone.position
@@ -71,6 +71,10 @@ def back_shift(pose, r):
     back = pose
     back[:2] = [pose[0]-r*np.cos(pose[2]), pose[1]-r*np.sin(pose[2])]
     return back
+def forward_shift(pose, r):
+    back = pose
+    back[:2] = [pose[0]+r*np.cos(pose[2]), pose[1]+r*np.sin(pose[2])]
+    return back
 def turn_left(pose, yaw=np.pi/2*np.random.uniform(0.2, 0.6)):
     pose[2] -= yaw
     return pose
@@ -104,7 +108,7 @@ def visualize(traj, pose, params):
     plot_robot(pose, params)
     plt.legend()
 
-def obstacle_check(pose, gridmap, params):
+def border_check(pose, gridmap, params):
     gmap = gridmap
 
     r = int(100*params.sensor_range_m)
@@ -119,7 +123,7 @@ def obstacle_check(pose, gridmap, params):
     lefti = np.array(left, dtype=int)
     righti = np.array(right, dtype=int)
 
-    obstacle = {
+    border = {
         'front': 0,
         'back':  0,
         'right': 0,
@@ -131,41 +135,43 @@ def obstacle_check(pose, gridmap, params):
             m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
             if gmap[m,n]:
                 # print('FRONT collision')
-                obstacle['front'] = 1
+                border['front'] = 1
 
     for i in np.arange(min(pi[0], backi[0]), max(pi[0], backi[0])+1):
         for j in np.arange(min(pi[1], backi[1]), max(pi[1], backi[1])+1):
             m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
             if gmap[m,n]:
                 # print('BACK collision')
-                obstacle['back'] = 1
+                border['back'] = 1
 
     for i in np.arange(min(pi[0], lefti[0]), max(pi[0], lefti[0])+1):
         for j in np.arange(min(pi[1], lefti[1]), max(pi[1], lefti[1])+1):
             m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
             if gmap[m,n]:
                 # print('LEFT collision')
-                obstacle['left'] = 1
+                border['left'] = 1
 
     for i in np.arange(min(pi[0], righti[0]), max(pi[0], righti[0])+1):
         for j in np.arange(min(pi[1], righti[1]), max(pi[1], righti[1])+1):
             m = min(j, gmap.shape[0]-1); n = min(i, gmap.shape[1]-1)
             if gmap[m,n]:
                 # print('RIGHT collision')
-                obstacle['right'] = 1
+                border['right'] = 1
 
-    return obstacle
+    return border
 
 def motion(state, goal, params):
     # state = [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
     dx = goal[0] - state[0]
     dy = goal[1] - state[1]
     goal_yaw = math.atan2(dy, dx)
-    state[4] = 2.2*math.sin(goal_yaw - state[2]) # omega(rad/s)
+    K_theta = 3.0
+    state[4] = K_theta*math.sin(goal_yaw - state[2]) # omega(rad/s)
     state[2] += params.dt*state[4] # yaw(rad)
 
     dist_to_goal = np.linalg.norm(goal - state[:2])
-    state[3] += 0.1*dist_to_goal
+    K_v = 0.1
+    state[3] += K_v*dist_to_goal
     if state[3] >= params.max_vel: state[3] = params.max_vel
     if state[3] <= params.min_vel: state[3] = params.min_vel
 
@@ -188,22 +194,25 @@ def avoid_obstacles(drone, params):
     if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
         print('FRONT RIGHT')
         pose = slow_down(pose, params)
-        pose = back_shift(pose, 0.02)
-        pose = turn_left(pose, np.radians(40))
+        pose = back_shift(pose, 0.04)
+        pose = turn_left(pose, np.radians(60))
+        pose = forward_shift(pose, 0.04)
     if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
         print('FRONT LEFT')
         pose = slow_down(pose, params)
-        pose = back_shift(pose, 0.02)
-        pose = turn_right(pose, np.radians(40))
+        pose = back_shift(pose, 0.04)
+        pose = turn_right(pose, np.radians(60))
+        pose = forward_shift(pose, 0.04)
     if is_close(drone.measurement['left']):
         print('LEFT')
-        pose = right_shift(pose, 0.08)
+        pose = right_shift(pose, 0.04)
     if is_close(drone.measurement['right']):
         print('RIGHT')
-        pose = left_shift(pose, 0.08)
+        pose = left_shift(pose, 0.04)
     drone.state = np.array(pose)
 
-def flight_mission(drone, goal_x, goal_y, params):
+def flight_mission(drone, goal_x, goal_y, params, collision_avoidance=True):
+    if params.toFly: takeoff(drone, params.flight_height)
     goal = [goal_x[drone.goali], goal_y[drone.goali]] # goal = [x, y], m
     # initial state = [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
     drone.state = np.array([drone.position[0], drone.position[1], 0.0, 0.0, 0.0])
@@ -211,13 +220,13 @@ def flight_mission(drone, goal_x, goal_y, params):
     t_prev_goal = time.time()
 
     plt.figure(figsize=(10,10))
-    gridmap.draw_map()
+    gridmap.draw_map(obstacles)
     # while True:
     for _ in range(params.numiters):
         drone.state = motion(drone.state, goal, params)
 
         pose_grid = gridmap.meters2grid(drone.state[:2])
-        boundary = obstacle_check([pose_grid[0], pose_grid[1], drone.state[2]], gridmap.gmap, params)
+        boundary = border_check([pose_grid[0], pose_grid[1], drone.state[2]], gridmap.gmap, params)
         # print(boundary)
 
         if boundary['right'] or boundary['front']:
@@ -227,7 +236,7 @@ def flight_mission(drone, goal_x, goal_y, params):
             drone.state = slow_down(drone.state, params)
             drone.state = turn_right(drone.state, np.radians(20))
 
-        if params.toFly: avoid_obstacles(drone, params)
+        if params.toFly and collision_avoidance: avoid_obstacles(drone, params)
 
         goal_dist = np.linalg.norm(goal - drone.state[:2])
         # print('Distance to goal %.2f [m]:' %goal_dist)
@@ -261,16 +270,19 @@ def flight_mission(drone, goal_x, goal_y, params):
 
         if params.animate or params.toFly:
             plt.cla()
-            gridmap.draw_map()
+            gridmap.draw_map(obstacles)
             plt.plot(goal_x, goal_y)
             plt.plot(goal[0], goal[1], 'ro', markersize=20, label='Goal position')
             visualize(drone.traj, drone.state, params)
             plt.pause(0.1)
 
     if params.toFly:
-        goTo(drone, [drone.pose_home[0], drone.pose_home[1], params.flight_height, 0])
+        # Going home along Pi-shaped trajectory
+        goTo(drone, [drone.position[0], drone.position[1], 0.8, 0])
         hover(drone, 1.0)
-        land(drone)
+        goTo(drone, [drone.pose_home[0], drone.pose_home[1], 0.8, 0])
+        hover(drone, 1.0)
+        land(drone, height=drone.pose_home[2]+0.04)
 
 
 def exploration_conveyer(drone, goal_x, goal_y, params):
@@ -298,7 +310,7 @@ def exploration_conveyer(drone, goal_x, goal_y, params):
                     pass
         # One flight mission
         print("Starting the mission!")
-        flight_mission(drone, goal_x, goal_y, params)
+        flight_mission(drone, goal_x, goal_y, params, collision_avoidance=True)
         time.sleep(4)
         if params.toFly: land_to_charge(drone, params)
         time.sleep(params.time_between_missions)
@@ -306,21 +318,21 @@ def exploration_conveyer(drone, goal_x, goal_y, params):
 
 class Params:
     def __init__(self):
-        self.numiters = 500
-        self.vel = 0.5 # [m/s]
+        self.numiters = 1000
         self.uri = 'radio://0/80/2M/E7E7E7E702'
-        self.flight_height = 0.4 # [m]
+        self.flight_height = 0.25 # [m]
         self.toFly = 1
-        self.check_battery = 1
-        self.animate = 0
+        self.check_battery = 0
+        self.animate = 1
         self.dt = 0.1
         self.goal_tol = 0.3
-        self.max_vel = 0.5 # m/s
+        self.sweep_resolution = 0.25
+        self.max_vel = 0.6 # m/s
         self.min_vel = 0.1 # m/s
         self.sensor_range_m = 0.3 # m
         self.time_to_switch_goal = 10.0 # sec
-        self.land_to_charge_attempts = 3
-        self.num_missions = 3
+        self.land_to_charge_attempts = 0
+        self.num_missions = 1
         self.time_between_missions = 5
 
 
@@ -333,25 +345,28 @@ if __name__ == '__main__':
     drone.pose_home = drone.position
     print('Home positions:', drone.pose_home)
 
-    SCALE = 1.3
+    SCALE = 1.5
     flight_area_vertices = SCALE * np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])
     gridmap = GridMap(flight_area_vertices)
 
+    # Adding virtual obstacles for debugging
+    obstacles = [
+        # np.array([[-0.2, 0.35], [-0.2, -0.35], [0.2, -0.35], [0.2, 0.35]])
+    ]
+    gridmap.add_virtual_rectangular_obstacles(obstacles)
+
     ox = flight_area_vertices[:,0].tolist() + [flight_area_vertices[0,0]]
     oy = flight_area_vertices[:,1].tolist() + [flight_area_vertices[0,1]]
-    reso = params.goal_tol
+    reso = params.sweep_resolution
     goal_x, goal_y = planning(ox, oy, reso)
-
 
     if params.toFly:
         prepare(drone)
         raw_input('Press Enter to fly...')
-        takeoff(drone, params.flight_height)
 
-    # flight_mission(drone, goal_x, goal_y, params)
     exploration_conveyer(drone, goal_x, goal_y, params)
 
-    gridmap.draw_map()
+    gridmap.draw_map(obstacles)
     plt.plot(goal_x, goal_y)
     visualize(drone.traj, drone.state, params)
 

@@ -39,9 +39,9 @@ class GridMap:
         gmap = flood_fill((int(np.mean(xs)), int(np.mean(ys))), gmap)
         self.gmap = gmap
 
-    def add_obstacles_to_grid_map(self, obstacles):
+    def add_virtual_rectangular_obstacles(self, obstacles):
         """ Obstacles dicretized map """
-        # rectangular obstacles
+        # rectangular obstacles described by 4 vertices
         for obstacle in obstacles:
             x1 = self.meters2grid(obstacle[0][1]); x2 = self.meters2grid(obstacle[2][1])
             y1 = self.meters2grid(obstacle[0][0]); y2 = self.meters2grid(obstacle[2][0])
