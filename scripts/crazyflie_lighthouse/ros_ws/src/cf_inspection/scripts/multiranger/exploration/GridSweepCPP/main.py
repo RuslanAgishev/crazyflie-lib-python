@@ -14,6 +14,7 @@ import time
 import rospy
 from drone_multiranger import DroneMultiranger
 from grid_map import GridMap
+from tools import define_polygon, polygon_contains_point
 
     
 def takeoff(drone, height=0.3):
@@ -93,17 +94,17 @@ def prepare(drone):
     reset_estimator(scf)
     activate_mellinger_controller(scf, False)
 
-def visualize(traj, pose, params):
-    def plot_robot(pose, params):
-        r = params.sensor_range_m
-        plt.plot([pose[0]-r*np.cos(pose[2]), pose[0]+r*np.cos(pose[2])],
-                 [pose[1]-r*np.sin(pose[2]), pose[1]+r*np.sin(pose[2])], '--', color='b')
-        plt.plot([pose[0]-r*np.cos(pose[2]+np.pi/2), pose[0]+r*np.cos(pose[2]+np.pi/2)],
-                 [pose[1]-r*np.sin(pose[2]+np.pi/2), pose[1]+r*np.sin(pose[2]+np.pi/2)], '--', color='b')
-        plt.plot(pose[0], pose[1], 'ro', markersize=5)
-        plt.arrow(pose[0], pose[1], 0.05 * np.cos(pose[2]), 0.05 * np.sin(pose[2]),
-                  head_length=0.1, head_width=0.1)
+def plot_robot(pose, params):
+    r = params.sensor_range_m
+    plt.plot([pose[0]-r*np.cos(pose[2]), pose[0]+r*np.cos(pose[2])],
+             [pose[1]-r*np.sin(pose[2]), pose[1]+r*np.sin(pose[2])], '--', color='b')
+    plt.plot([pose[0]-r*np.cos(pose[2]+np.pi/2), pose[0]+r*np.cos(pose[2]+np.pi/2)],
+             [pose[1]-r*np.sin(pose[2]+np.pi/2), pose[1]+r*np.sin(pose[2]+np.pi/2)], '--', color='b')
+    plt.plot(pose[0], pose[1], 'ro', markersize=5)
+    plt.arrow(pose[0], pose[1], 0.05 * np.cos(pose[2]), 0.05 * np.sin(pose[2]),
+              head_length=0.1, head_width=0.1)
 
+def visualize(traj, pose, params):
     plt.plot(traj[:,0], traj[:,1], 'g')
     plot_robot(pose, params)
     plt.legend()
@@ -170,7 +171,7 @@ def motion(state, goal, params):
     state[2] += params.dt*state[4] # yaw(rad)
 
     dist_to_goal = np.linalg.norm(goal - state[:2])
-    K_v = 0.1
+    K_v = 0.15
     state[3] += K_v*dist_to_goal
     if state[3] >= params.max_vel: state[3] = params.max_vel
     if state[3] <= params.min_vel: state[3] = params.min_vel
@@ -185,7 +186,7 @@ def motion(state, goal, params):
 def avoid_obstacles(drone, params):
     def is_close(measured_range):
         # MIN_DISTANCE = 1000*params.sensor_range_m # mm
-        MIN_DISTANCE = 350 # mm
+        MIN_DISTANCE = 400 # mm
         if measured_range is None:
             return False
         else:
@@ -196,19 +197,19 @@ def avoid_obstacles(drone, params):
         pose = slow_down(pose, params)
         pose = back_shift(pose, 0.04)
         pose = turn_left(pose, np.radians(60))
-        pose = forward_shift(pose, 0.04)
+        pose = forward_shift(pose, 0.06)
     if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
         print('FRONT LEFT')
         pose = slow_down(pose, params)
         pose = back_shift(pose, 0.04)
         pose = turn_right(pose, np.radians(60))
-        pose = forward_shift(pose, 0.04)
+        pose = forward_shift(pose, 0.06)
     if is_close(drone.measurement['left']):
         print('LEFT')
-        pose = right_shift(pose, 0.04)
+        pose = right_shift(pose, 0.08)
     if is_close(drone.measurement['right']):
         print('RIGHT')
-        pose = left_shift(pose, 0.04)
+        pose = left_shift(pose, 0.08)
     drone.state = np.array(pose)
 
 def flight_mission(drone, goal_x, goal_y, params, collision_avoidance=True):
@@ -282,6 +283,8 @@ def flight_mission(drone, goal_x, goal_y, params, collision_avoidance=True):
         hover(drone, 1.0)
         goTo(drone, [drone.pose_home[0], drone.pose_home[1], 0.8, 0])
         hover(drone, 1.0)
+        goTo(drone, [drone.pose_home[0], drone.pose_home[1], drone.pose_home[2]+0.1, 0])
+        hover(drone, 1.0)
         land(drone, height=drone.pose_home[2]+0.04)
 
 
@@ -315,19 +318,37 @@ def exploration_conveyer(drone, goal_x, goal_y, params):
         if params.toFly: land_to_charge(drone, params)
         time.sleep(params.time_between_missions)
 
+def define_flight_area(initial_pose, params):
+    plt.grid()
+    plot_robot(initial_pose, params)
+    while True:
+        try:
+            num_pts = int( input('Enter number of polygonal vertixes: ') )
+            break
+        except:
+            print('\nPlease, enter an integer number.')
+    while True:
+        flight_area_vertices = define_polygon(num_pts)
+        if polygon_contains_point(initial_pose[:2], flight_area_vertices):
+            break
+        plt.clf()
+        plt.grid()
+        plot_robot(initial_pose, params)
+        print('The robot is not inside the flight area. Define again.')
+    return flight_area_vertices
 
 class Params:
     def __init__(self):
         self.numiters = 1000
-        self.uri = 'radio://0/80/2M/E7E7E7E702'
-        self.flight_height = 0.25 # [m]
+        self.uri = 'radio://0/80/2M/E7E7E7E703'
+        self.flight_height = 0.4 # [m]
         self.toFly = 1
-        self.check_battery = 0
+        self.check_battery = 1
         self.animate = 1
         self.dt = 0.1
         self.goal_tol = 0.3
-        self.sweep_resolution = 0.25
-        self.max_vel = 0.6 # m/s
+        self.sweep_resolution = 0.3
+        self.max_vel = 0.9 # m/s
         self.min_vel = 0.1 # m/s
         self.sensor_range_m = 0.3 # m
         self.time_to_switch_goal = 10.0 # sec
@@ -345,9 +366,9 @@ if __name__ == '__main__':
     drone.pose_home = drone.position
     print('Home positions:', drone.pose_home)
 
-    SCALE = 1.5
-    flight_area_vertices = SCALE * np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])
-    gridmap = GridMap(flight_area_vertices)
+    flight_area_vertices = define_flight_area(drone.pose_home, params)
+    # SCALE = 1.5; flight_area_vertices = SCALE * np.array([[-0.6, 0.8], [-0.9, -0.9], [0.8, -0.8], [0.5, 0.9]])
+    gridmap = GridMap(flight_area_vertices, drone.pose_home[:2])
 
     # Adding virtual obstacles for debugging
     obstacles = [
@@ -357,8 +378,8 @@ if __name__ == '__main__':
 
     ox = flight_area_vertices[:,0].tolist() + [flight_area_vertices[0,0]]
     oy = flight_area_vertices[:,1].tolist() + [flight_area_vertices[0,1]]
-    reso = params.sweep_resolution
-    goal_x, goal_y = planning(ox, oy, reso)
+
+    goal_x, goal_y = planning(ox, oy, params.sweep_resolution)
 
     if params.toFly:
         prepare(drone)
@@ -369,7 +390,8 @@ if __name__ == '__main__':
     gridmap.draw_map(obstacles)
     plt.plot(goal_x, goal_y)
     visualize(drone.traj, drone.state, params)
-
+    plt.draw()
+    plt.pause(0.1)
     raw_input('Hit Enter to close all figures.')
     plt.close('all')
 
