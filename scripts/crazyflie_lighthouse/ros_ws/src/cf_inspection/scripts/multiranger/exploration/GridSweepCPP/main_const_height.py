@@ -82,8 +82,8 @@ def turn_left(pose, yaw=np.pi/2*np.random.uniform(0.2, 0.6)):
 def turn_right(pose, yaw=np.pi/2*np.random.uniform(0.2, 0.6)):
     pose[2] += yaw
     return pose
-def slow_down(state, params, dv=0.1):
-    if state[3]>params.min_vel:
+def slow_down(state, min_vel, dv=0.1):
+    if state[3]>min_vel:
         state[3] -= dv
     return state
 
@@ -194,13 +194,13 @@ def avoid_obstacles(drone, params):
     pose = drone.state
     if is_close(drone.measurement['front']) and drone.measurement['left'] > drone.measurement['right']:
         print('FRONT RIGHT')
-        pose = slow_down(pose, params)
+        pose = slow_down(pose, params.min_vel)
         pose = back_shift(pose, 0.04)
         pose = turn_left(pose, np.radians(60))
         pose = forward_shift(pose, 0.06)
     if is_close(drone.measurement['front']) and drone.measurement['left'] < drone.measurement['right']:
         print('FRONT LEFT')
-        pose = slow_down(pose, params)
+        pose = slow_down(pose, params.min_vel)
         pose = back_shift(pose, 0.04)
         pose = turn_right(pose, np.radians(60))
         pose = forward_shift(pose, 0.06)
@@ -231,10 +231,10 @@ def flight_mission(drone, goal_x, goal_y, params, collision_avoidance=True):
         # print(boundary)
 
         if boundary['right'] or boundary['front']:
-            drone.state = slow_down(drone.state, params)
+            drone.state = slow_down(drone.state, params.min_vel)
             drone.state = turn_left(drone.state, np.radians(20))
         elif boundary['left']:
-            drone.state = slow_down(drone.state, params)
+            drone.state = slow_down(drone.state, params.min_vel)
             drone.state = turn_right(drone.state, np.radians(20))
 
         if params.toFly and collision_avoidance: avoid_obstacles(drone, params)
