@@ -17,8 +17,8 @@ def define_polygon(num_pts=4):
 
 	ax = plt.gca()
 	plt.setp(ax, autoscale_on=0)
-	ax.set_xlim([-2.5, 2.5])
-	ax.set_ylim([-2.5, 2.5])
+	ax.set_xlim([-1.5, 1.5])
+	ax.set_ylim([-1.5, 1.5])
 
 	tellme('You will define a flight area with %d points.\nClick to begin.'%num_pts)
 

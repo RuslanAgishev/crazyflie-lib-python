@@ -59,22 +59,22 @@ if __name__ == '__main__':
 
             # There is a set of functions that move a specific distance
             # We can move in all directions
-            mc.up(0.2)
+            mc.up(0.4)
             time.sleep(1)
 
             mc.forward(1.0)
             time.sleep(2)
 
-            mc.right(1.0)
+            mc.right(0.5)
             time.sleep(2)
 
             mc.back(1.0)
             time.sleep(2)
 
-            mc.left(1.0)
+            mc.left(0.5)
             time.sleep(2)
 
-            mc.down(0.2)
+            mc.down(0.4)
             time.sleep(1)
 
             # We can also set the velocity

@@ -13,6 +13,7 @@ def takeoff(drone, height=0.3):
         time.sleep(0.1)
 def fly(drone):
     sp = drone.sp
+    # print(sp)
     drone.cf.commander.send_position_setpoint(sp[0], sp[1], sp[2], sp[3])
 def land(drone, height=-0.1, land_speed=0.2):
     print('Landing...')
@@ -46,13 +47,15 @@ def hover(drone, t_hover=2):
         time.sleep(0.1)
 
 def left_shift(pose, r):
-	yaw = pose[3]
-	left = [pose[0]+r*np.cos(yaw+np.pi/2), pose[1]+r*np.sin(yaw+np.pi/2)]
-	return left
+    yaw = pose[3]
+    left = [pose[0]+r*np.cos(yaw+np.pi/2), pose[1]+r*np.sin(yaw+np.pi/2)]
+    pose[:2] = left
+    return np.array(pose)
 def right_shift(pose, r):
-	yaw = pose[3]
-	right = [pose[0]-r*np.cos(yaw+np.pi/2), pose[1]-r*np.sin(yaw+np.pi/2)]
-	return right
+    yaw = pose[3]
+    right = [pose[0]-r*np.cos(yaw+np.pi/2), pose[1]-r*np.sin(yaw+np.pi/2)]
+    pose[:2] = right
+    return np.array(pose)
 def back_shift(pose, r):
 	yaw = pose[3]
 	back = pose
@@ -69,7 +72,7 @@ def turn_left(pose, yaw=np.pi/2*np.random.uniform(0.2, 0.6)):
 def turn_right(pose, yaw=np.pi/2*np.random.uniform(0.2, 0.6)):
 	pose[3] += yaw
 	return pose
-def slow_down(state, min_vel, dv=0.1):
+def slow_down(state, min_vel, dv=0.05):
 	if state[4]>min_vel:
 		state[4] -= dv
 	return state

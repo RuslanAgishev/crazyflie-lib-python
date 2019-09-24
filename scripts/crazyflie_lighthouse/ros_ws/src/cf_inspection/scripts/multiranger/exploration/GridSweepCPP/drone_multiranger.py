@@ -29,15 +29,15 @@ logging.basicConfig(level=logging.INFO)
 # Enable plotting of Crazyflie
 PLOT_CF = True
 # Set the sensor threashold (in mm)
-SENSOR_TH = 2000
+SENSOR_TH = 4000
 # Set the speed factor for moving and rotating
 SPEED_FACTOR = 0.15
 # freguency of getting scans
 SENSOR_FREQUENCY = 10
 print('Position, Battery and Multiranger update rate:', SENSOR_FREQUENCY)
 
-V_BATTERY_TO_GO_HOME = 3.3 # [V]
-V_BATTERY_CHARGED = 3.85    # [V]
+V_BATTERY_TO_GO_HOME = 3.2 # [V]
+V_BATTERY_CHARGED = 3.9    # [V]
 
 WRITE_TO_FILE = 0# writing a pointcloud data to a csv file
 GOAL_TOLERANCE = 0.1 # [m], the goal is considered visited is the drone is closer than GOAL_TOLERANCE

@@ -15,7 +15,7 @@ from matplotlib.patches import Polygon
 
 
 class GridMap:
-    def __init__(self, polygon_vertices, point_inside_polygon=[0,0]):
+    def __init__(self, polygon_vertices, point_inside_polygon):
         self.map_center = np.array([0.0, 0.0])
         self.map_width_m = 5.0
         self.map_length_m = 5.0
@@ -35,8 +35,13 @@ class GridMap:
             for l in line:
                 gmap[l[1]][l[0]] = 0
         polygon_center_grid = np.array( self.meters2grid(polygon_center), dtype=int )
-        gmap = flood_fill(polygon_center_grid, gmap)
+        gmap = flood_fill([polygon_center_grid[1], polygon_center_grid[0]], gmap)
         self.gmap = gmap
+        # plt.figure()
+        # plt.imshow(self.gmap, cmap='gray')
+        # plt.plot(polygon_center_grid[0], polygon_center_grid[1], 'ro', markersize=10, zorder=20)
+        # plt.title('Gridmap polygon center value:' +\
+        #             str(self.gmap[polygon_center_grid[0], polygon_center_grid[1]]))
 
     def add_virtual_rectangular_obstacles(self, obstacles):
         """ Obstacles dicretized map """
