@@ -1,3 +1,30 @@
+"""
+Coverage Path Planning algorithm implementation for a drone (tested on Crazyflie 2.1)
+equipped with 4 ranger sensors (front, back, left and right)
+for obstacles detection. Flight volume is defined as 
+a polygon base prism in 3D. The prism and its location in space
+is defined by the shape of the vertices of the polygon in its bases and
+and 2 heights values (minimum and maximum allowed flight heights of the drone),
+defining the bases vertical location (along Z-axis) in space.
+The borders of the polygonal prism are treaded as walls of obstacles.
+The base polygon is defined by the number of vertices and their XY-location.
+As the script is started, the user is asked to define the flight polygonal area.
+Ones it is done, the drones takes off to the maximum allowed height and start exploration of the
+previously defined flight volume. The exploration trajectory is defined by
+coverage path planning algorithm (CPP). The main parameter to define a CPP
+trajectory is sweep resolution, which defines the distance between Gamma-shaped
+sub-trajectories as well as the height change, ones the polygonanl region
+on a constant height is explored.
+The algorithm is augmented with collision avoidance in the layered manner.
+The CPP trajectory is treated as a global planner path, which is corrected by the local
+planner aimed on obstacle avoidance and trajectory feasibility for the robot,
+taking in account the linear and rotational speed limits.
+The global planner trajectory is divided to a series of consequent waypoints.
+The collision-free route between 2 consequetive waypoints is a task for the local
+trajectory planner. The robot's heading and linear velocity are deterimend in
+motion() function based on the distance to the goal, current robot state and
+presence of obstacles in the region, percieved by the multiranger sensor.
+"""
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
@@ -103,7 +130,10 @@ def border_check(pose, gridmap, params):
     return obstacle
 
 def motion(state, goal, params):
-    # state = [x(m), y(m), z(m), yaw(rad), v(m/s), omega(rad/s)]
+    """
+    Defines motion model of the robot with the following state variables:
+    state = [x(m), y(m), z(m), yaw(rad), v(m/s), omega(rad/s)]
+    """
     dx = goal[0] - state[0]
     dy = goal[1] - state[1]
     goal_yaw = math.atan2(dy, dx)
@@ -263,6 +293,17 @@ def flight_mission(drone, goal_x, goal_y, goal_z, params):
 
 
 def exploration_conveyer(drone, goal_x, goal_y, goal_z, params):
+    """
+    The exploration conveyer monitors the battery charge of the drone.
+    It doesn't allow a drone to take off, if its battery is not charged enough.
+    It also handles repitability of the flight mission. Ones the flight mission
+    is completed (or partially completed), the exploration conveyer checks if
+    the drone is landed properly on its home location (with wireless charger).
+    If the drone is not accurately landed on the wireless charger it will
+    be given a task to take off on a small height, correct its position
+    relative to its home location and try to land properly again in order
+    wireless charging process is started.
+    """
     def land_to_charge(drone, params):
         for _ in range(params.land_to_charge_attempts):
             if drone.charging_state != 1:

@@ -1,10 +1,18 @@
 """
-Random walk algorithm implementation for a mobile robot
+Random walk algorithm implementation for a swarm of drones (tested on Crazyflie 2.1)
 equipped with 4 ranger sensors (front, back, left and right)
-for obstacles detection
+for obstacles detection. Flight area for each robot is defined as 
+a polygonal region by its vertixes. Each robot should be placed inside the defined
+flight region. The region outside the flight area is treaded as a wall of obstacles.
+Ones the robots take off, they travel forward until an obstacle is detected
+by the multiranger sensor or they approach the wall close, than the
+sensor sensitivity range. If obstacle or wall detection happens, the
+robot changes its flight direction, turning on a random angle. Note,
+that wall and obstacle detection algorithms are different and implemented as
+separate blocks.
 
 author: Ruslan Agishev (agishev_ruslan@mail.ru)
-reference: https://ieeexplore.ieee.org/abstract/document/6850799/s
+reference: https://ieeexplore.ieee.org/abstract/document/6850799/
 """
 
 import matplotlib.pyplot as plt
@@ -216,13 +224,13 @@ def visualize(drone):
 	plt.plot(drone.traj[:,0], drone.traj[:,1], label='Drone '+drone.id+' trajectory')
 	plot_robot(drone.pose, drone.gridmap_params)
 
-def exploration_mission(drone, flight_height, params):
+def exploration_mission(drone, params):
 	drone.pose_home = drone.position
 	print('Home positions:', drone.pose_home)
 
 	if params.toFly:
 		takeoff(drone, 0.3)
-		goTo(drone, [drone.last_sp[0], drone.last_sp[1], flight_height, 0])
+		goTo(drone, [drone.last_sp[0], drone.last_sp[1], drone.flight_height, 0])
 
 	#    x,    y,      yaw
 	pose = [drone.last_sp[0], drone.last_sp[1], 0.0]
@@ -265,7 +273,7 @@ def exploration_mission(drone, flight_height, params):
 
 		drone.traj = np.vstack([drone.traj, pose[:2]])
 
-		drone.sp = [pose[0], pose[1], flight_height, np.degrees(pose[2])%360]
+		drone.sp = [pose[0], pose[1], drone.flight_height, np.degrees(pose[2])%360]
 		drone.pose = pose
 
 		if params.check_battery:
@@ -286,7 +294,18 @@ def exploration_mission(drone, flight_height, params):
 		hover(drone, 1.0)
 		land(drone)
 
-def exploration_conveyer(drone, flight_height, params):
+def exploration_conveyer(drone, params):
+	"""
+	The exploration conveyer monitors the battery charge of the drone.
+	It doesn't allow a drone to take off, if its battery is not charged enough.
+	It also handles repitability of the flight mission. Ones the flight mission
+	is completed (or partially completed), the exploration conveyer checks if
+	the drone is landed properly on its home location (with wireless charger).
+	If the drone is not accurately landed on the wireless charger it will
+	be given a task to take off on a small height, correct its position
+	relative to its home location and try to land properly again in order
+	wireless charging process is started.
+	"""
 	def land_to_charge(drone, params):
 		for _ in range(params.land_to_charge_attempts):
 			if drone.charging_state != 1:
@@ -311,7 +330,7 @@ def exploration_conveyer(drone, flight_height, params):
 		            pass
 		# One flight mission
 		print("Starting the mission!")
-		exploration_mission(drone, flight_height, params)
+		exploration_mission(drone, params)
 		time.sleep(4)
 		land_to_charge(drone, params)
 		time.sleep(params.time_between_missions)
@@ -323,10 +342,10 @@ class Params:
 		self.uris = [
 					# 'radio://0/80/2M/E7E7E7E701',
 					'radio://0/80/2M/E7E7E7E702',
-					# 'radio://0/80/2M/E7E7E7E703',
+					'radio://0/80/2M/E7E7E7E703',
 					]
 		self.check_battery = 0
-		self.toFly = 0
+		self.toFly = 1
 		self.num_missions = 1
 		self.land_to_charge_attempts = 0
 		self.time_between_missions = 5 # sec
@@ -356,8 +375,11 @@ def main():
 					np.array([[-0.5, 0.0], [-0.5, -1.0], [1.0, -1.0], [1.0, 0.0]]),
 					]
 
-	for fl in range(len(drones)):
-		drones[fl].gridmap_params = GridMap(flight_areas[fl])
+	flight_heights = [0.3, 0.6, 0.9]
+
+	for i in range(len(drones)):
+		drones[i].gridmap_params = GridMap(flight_areas[i])
+		drones[i].flight_height = flight_heights[i]
 
 	if params.toFly:
 		threads = []
@@ -369,11 +391,12 @@ def main():
 
 		raw_input('Press Enter to fly...')
 
-	th1 = Thread(target=exploration_conveyer, args=(drones[0], 0.3, params,) )
-	# th2 = Thread(target=exploration_conveyer, args=(drones[1], 0.6, params,) )
-	# th3 = Thread(target=exploration_conveyer, args=(drones[2], 0.3, params,) )
-	th1.start(); #th2.start();# th3.start();
-	th1.join(); #th2.join(); #th3.join();
+	threads = []
+	for drone in drones:
+		th = Thread(target=exploration_conveyer, args=(drone, params,) )
+		threads.append(th)
+	for th in threads: th.start()
+	for th in threads: th.join()
 
 
 	plt.figure(figsize=(10,10))

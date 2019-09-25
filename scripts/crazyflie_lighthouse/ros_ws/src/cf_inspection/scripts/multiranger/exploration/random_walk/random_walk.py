@@ -1,7 +1,15 @@
 """
-Random walk algorithm implementation for a mobile robot
+Random walk algorithm implementation for a robot (tested on Crazyflie 2.1)
 equipped with 4 ranger sensors (front, back, left and right)
-for obstacles detection
+for obstacles detection. Flight area is defined as 
+a polygonal region by its vertixes. The robot should be placed inside the defined
+flight region. The region outside the flight area is treaded as a wall of obstacles.
+Ones the robot takes off, it travels forward until an obstacle is detected
+by the multiranger sensor or it approaches the wall closer, than the
+sensor sensitivity range. If obstacle or wall detection happens, the
+robot changes its flight direction, turning on a random angle. Note,
+that wall and obstacle detection algorithms are different and implemented as
+separate blocks.
 
 author: Ruslan Agishev (agishev_ruslan@mail.ru)
 reference: https://ieeexplore.ieee.org/abstract/document/6850799/s
