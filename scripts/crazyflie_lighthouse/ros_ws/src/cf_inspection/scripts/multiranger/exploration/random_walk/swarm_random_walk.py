@@ -325,10 +325,10 @@ class Params:
 					'radio://0/80/2M/E7E7E7E702',
 					# 'radio://0/80/2M/E7E7E7E703',
 					]
-		self.check_battery = 1
-		self.toFly = 1
-		self.num_missions = 3
-		self.land_to_charge_attempts = 3
+		self.check_battery = 0
+		self.toFly = 0
+		self.num_missions = 1
+		self.land_to_charge_attempts = 0
 		self.time_between_missions = 5 # sec
 
 
